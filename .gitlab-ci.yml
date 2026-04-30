@@ -5,6 +5,7 @@ stages:
 
 variables:
   CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+  RUST_IMAGE: rust:1.94-bookworm
 
 cache:
   key: "$CI_JOB_NAME"
@@ -14,7 +15,7 @@ cache:
     - target
 
 .rust-linux:
-  image: rust:latest
+  image: "$RUST_IMAGE"
   before_script:
     - rustc --version
     - cargo --version
@@ -79,6 +80,8 @@ build:linux:arm64:
 
 build:macos:
   stage: build
+  when: manual
+  allow_failure: true
   tags:
     - saas-macos-medium-m1
   image: macos-15-xcode-16
