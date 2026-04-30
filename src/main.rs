@@ -3,13 +3,19 @@ use reeknote::config::Config;
 use reeknote::edam_client::EdamClient;
 use reeknote::editor;
 use reeknote::errors::{ReeknoteError, Result};
-use reeknote::models::{ListItem, Note, Notebook};
+use reeknote::models::{ListItem, Note, Notebook, Tag};
 use reeknote::oauth::OAuthClient;
 use reeknote::out;
 use reeknote::reeknote as app;
 use reeknote::reeknote::{EvernoteClient, NotesService};
 use reeknote::storage::Storage;
+use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const METADATA_CACHE_TTL_SECONDS: i64 = 3_600;
+const NOTEBOOKS_CACHE_UPDATED_AT: &str = "notebooks_cache_updated_at";
+const TAGS_CACHE_UPDATED_AT: &str = "tags_cache_updated_at";
 
 fn main() {
     let exit_code = match run(std::env::args().skip(1).collect()) {
@@ -283,7 +289,7 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
         }
 
         if !raw {
-            hydrate_show_metadata(&mut client, &mut note)?;
+            hydrate_show_metadata(storage, &mut client, &mut note)?;
             user = Some(
                 storage
                     .get_user_info()
@@ -464,8 +470,9 @@ fn handle_dedup(storage: &mut Storage, config: &Config, values: ParsedArgs) -> R
 
 fn handle_notebook_list(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Result<()> {
     let mut client = make_client(storage, config)?;
-    let mut items = client
-        .find_notebooks()?
+    let notebooks = client.find_notebooks()?;
+    cache_notebooks(storage, &notebooks)?;
+    let mut items = notebooks
         .into_iter()
         .map(ListItem::Notebook)
         .collect::<Vec<_>>();
@@ -535,6 +542,7 @@ fn handle_notebook_remove(
 fn handle_tag_list(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Result<()> {
     let mut client = make_client(storage, config)?;
     let tags = client.find_tags()?;
+    cache_tags(storage, &tags)?;
     let items = tags.into_iter().map(ListItem::Tag).collect::<Vec<_>>();
     print!(
         "{}",
@@ -619,7 +627,7 @@ fn resolve_note(
     note_ref: &str,
 ) -> Result<Note> {
     if let Some(note) = storage.get_note(note_ref) {
-        return client.get_note(&note.guid);
+        return get_note_with_cached_metadata(storage, client, &note.guid);
     }
 
     if let Some(note) = storage.get_search().and_then(|search| {
@@ -628,11 +636,11 @@ fn resolve_note(
             .ok()
             .and_then(|index| search.notes.get(index.saturating_sub(1)).cloned())
     }) {
-        return client.get_note(&note.guid);
+        return get_note_with_cached_metadata(storage, client, &note.guid);
     }
 
     if looks_like_guid(note_ref) {
-        return client.get_note(note_ref);
+        return get_note_with_cached_metadata(storage, client, note_ref);
     }
 
     let request = NotesService::create_search_request(
@@ -652,7 +660,7 @@ fn resolve_note(
         )),
         [note] => {
             storage.set_note(note.clone())?;
-            client.get_note(&note.guid)
+            get_note_with_cached_metadata(storage, client, &note.guid)
         }
         _ => {
             for note in &result.notes {
@@ -660,9 +668,29 @@ fn resolve_note(
             }
             storage.set_search(result.clone())?;
             let selected = select_note(&result.notes, config)?;
-            client.get_note(&selected.guid)
+            get_note_with_cached_metadata(storage, client, &selected.guid)
         }
     }
+}
+
+fn get_note_with_cached_metadata(
+    storage: &Storage,
+    client: &mut EdamClient,
+    guid: &str,
+) -> Result<Note> {
+    let cached = storage.get_note(guid);
+    let mut note = client.get_note(guid)?;
+    if let Some(cached) = cached {
+        if note.tag_names.is_empty() && cache_is_fresh(storage, TAGS_CACHE_UPDATED_AT) {
+            note.tag_names = cached.tag_names;
+        }
+        if note.notebook_name.as_deref().unwrap_or_default().is_empty()
+            && cache_is_fresh(storage, NOTEBOOKS_CACHE_UPDATED_AT)
+        {
+            note.notebook_name = cached.notebook_name;
+        }
+    }
+    Ok(note)
 }
 
 fn note_ref_resolves_without_selection(storage: &Storage, note_ref: &str) -> bool {
@@ -764,15 +792,60 @@ fn looks_like_guid(value: &str) -> bool {
     value.len() == 36 && value.chars().filter(|character| *character == '-').count() == 4
 }
 
-fn hydrate_show_metadata(client: &mut EdamClient, note: &mut Note) -> Result<()> {
+fn hydrate_show_metadata(
+    storage: &mut Storage,
+    client: &mut EdamClient,
+    note: &mut Note,
+) -> Result<()> {
     if should_fetch_note_tag_names(note) {
-        note.tag_names = client.get_note_tag_names(&note.guid)?;
+        hydrate_note_tag_names(storage, client, note)?;
     }
     if should_fetch_note_notebook_name(note) {
-        let notebooks = client.find_notebooks()?;
-        if let Some(notebook_name) = note_notebook_name(note, &notebooks) {
-            note.notebook_name = Some(notebook_name);
+        hydrate_note_notebook_name(storage, client, note)?;
+    }
+    storage.set_note(note.clone())?;
+    Ok(())
+}
+
+fn hydrate_note_tag_names(
+    storage: &mut Storage,
+    client: &mut EdamClient,
+    note: &mut Note,
+) -> Result<()> {
+    if let Some(tag_names) = cached_note_tag_names(storage, note) {
+        note.tag_names = tag_names;
+        return Ok(());
+    }
+    if let Some(tag_names) = cached_tag_names(storage, note) {
+        note.tag_names = tag_names;
+        return Ok(());
+    }
+
+    note.tag_names = client.get_note_tag_names(&note.guid)?;
+    if !note.tag_guids.is_empty() && note.tag_guids.len() == note.tag_names.len() {
+        let mut tags = storage.get_tags();
+        for (guid, name) in note.tag_guids.iter().zip(&note.tag_names) {
+            tags.insert(guid.clone(), name.clone());
         }
+        storage.set_tags(tags)?;
+    }
+    mark_cache_updated(storage, TAGS_CACHE_UPDATED_AT)
+}
+
+fn hydrate_note_notebook_name(
+    storage: &mut Storage,
+    client: &mut EdamClient,
+    note: &mut Note,
+) -> Result<()> {
+    if let Some(notebook_name) = cached_notebook_name(storage, note) {
+        note.notebook_name = Some(notebook_name);
+        return Ok(());
+    }
+
+    let notebooks = client.find_notebooks()?;
+    cache_notebooks(storage, &notebooks)?;
+    if let Some(notebook_name) = note_notebook_name(note, &notebooks) {
+        note.notebook_name = Some(notebook_name);
     }
     Ok(())
 }
@@ -795,6 +868,76 @@ fn note_notebook_name(note: &Note, notebooks: &[Notebook]) -> Option<String> {
         .iter()
         .find(|notebook| notebook.guid == guid)
         .map(|notebook| notebook.name.clone())
+}
+
+fn cached_note_tag_names(storage: &Storage, note: &Note) -> Option<Vec<String>> {
+    if cache_is_fresh(storage, TAGS_CACHE_UPDATED_AT) {
+        let tag_names = storage.get_note(&note.guid)?.tag_names;
+        if !tag_names.is_empty() {
+            return Some(tag_names);
+        }
+    }
+    None
+}
+
+fn cached_tag_names(storage: &Storage, note: &Note) -> Option<Vec<String>> {
+    if note.tag_guids.is_empty() || !cache_is_fresh(storage, TAGS_CACHE_UPDATED_AT) {
+        return None;
+    }
+    let tags = storage.get_tags();
+    note.tag_guids
+        .iter()
+        .map(|guid| tags.get(guid).cloned())
+        .collect()
+}
+
+fn cached_notebook_name(storage: &Storage, note: &Note) -> Option<String> {
+    if cache_is_fresh(storage, NOTEBOOKS_CACHE_UPDATED_AT) {
+        return note
+            .notebook_guid
+            .as_deref()
+            .and_then(|guid| storage.get_notebooks().get(guid).cloned());
+    }
+    None
+}
+
+fn cache_tags(storage: &mut Storage, tags: &[Tag]) -> Result<()> {
+    storage.set_tags(
+        tags.iter()
+            .map(|tag| (tag.guid.clone(), tag.name.clone()))
+            .collect::<BTreeMap<_, _>>(),
+    )?;
+    mark_cache_updated(storage, TAGS_CACHE_UPDATED_AT)
+}
+
+fn cache_notebooks(storage: &mut Storage, notebooks: &[Notebook]) -> Result<()> {
+    storage.set_notebooks(
+        notebooks
+            .iter()
+            .map(|notebook| (notebook.guid.clone(), notebook.name.clone()))
+            .collect::<BTreeMap<_, _>>(),
+    )?;
+    mark_cache_updated(storage, NOTEBOOKS_CACHE_UPDATED_AT)
+}
+
+fn cache_is_fresh(storage: &Storage, key: &str) -> bool {
+    storage
+        .get_setting(key)
+        .and_then(|value| value.parse::<i64>().ok())
+        .is_some_and(|updated_at| {
+            current_timestamp_seconds() - updated_at <= METADATA_CACHE_TTL_SECONDS
+        })
+}
+
+fn mark_cache_updated(storage: &mut Storage, key: &str) -> Result<()> {
+    storage.set_setting(key, current_timestamp_seconds().to_string())
+}
+
+fn current_timestamp_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_default()
 }
 
 fn confirm(message: &str) -> Result<bool> {
@@ -919,6 +1062,62 @@ mod tests {
         assert_eq!(
             note_notebook_name(&note, &notebooks).as_deref(),
             Some("Work")
+        );
+    }
+
+    #[test]
+    fn uses_fresh_cached_notebook_name() {
+        let mut storage = Storage::memory();
+        storage
+            .set_notebooks(BTreeMap::from([("work".to_string(), "Work".to_string())]))
+            .unwrap();
+        mark_cache_updated(&mut storage, NOTEBOOKS_CACHE_UPDATED_AT).unwrap();
+        let note = Note {
+            notebook_guid: Some("work".to_string()),
+            ..Note::default()
+        };
+        assert_eq!(
+            cached_notebook_name(&storage, &note).as_deref(),
+            Some("Work")
+        );
+    }
+
+    #[test]
+    fn ignores_stale_cached_notebook_name() {
+        let mut storage = Storage::memory();
+        storage
+            .set_notebooks(BTreeMap::from([("work".to_string(), "Work".to_string())]))
+            .unwrap();
+        storage
+            .set_setting(
+                NOTEBOOKS_CACHE_UPDATED_AT,
+                (current_timestamp_seconds() - METADATA_CACHE_TTL_SECONDS - 1).to_string(),
+            )
+            .unwrap();
+        let note = Note {
+            notebook_guid: Some("work".to_string()),
+            ..Note::default()
+        };
+        assert_eq!(cached_notebook_name(&storage, &note), None);
+    }
+
+    #[test]
+    fn uses_fresh_cached_tag_names() {
+        let mut storage = Storage::memory();
+        storage
+            .set_tags(BTreeMap::from([(
+                "tag-guid".to_string(),
+                "project".to_string(),
+            )]))
+            .unwrap();
+        mark_cache_updated(&mut storage, TAGS_CACHE_UPDATED_AT).unwrap();
+        let note = Note {
+            tag_guids: vec!["tag-guid".to_string()],
+            ..Note::default()
+        };
+        assert_eq!(
+            cached_tag_names(&storage, &note).unwrap(),
+            vec!["project".to_string()]
         );
     }
 }

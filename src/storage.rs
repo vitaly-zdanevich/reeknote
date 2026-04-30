@@ -246,7 +246,7 @@ fn serialize_storage(data: &StorageData) -> String {
     }
     for (guid, note) in &data.notes {
         lines.push(format!(
-            "note\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "note\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             enc(guid),
             enc(&note.title),
             note.created
@@ -265,6 +265,11 @@ fn serialize_storage(data: &StorageData) -> String {
                 .map(|value| value.to_string())
                 .unwrap_or_default(),
             note.tag_guids
+                .iter()
+                .map(|tag| enc(tag))
+                .collect::<Vec<_>>()
+                .join(","),
+            note.tag_names
                 .iter()
                 .map(|tag| enc(tag))
                 .collect::<Vec<_>>()
@@ -342,11 +347,7 @@ fn parse_storage(content: &str) -> Result<StorageData> {
                 tag_guids,
             ] => {
                 let guid = dec(guid)?;
-                let tag_guids = if tag_guids.is_empty() {
-                    Vec::new()
-                } else {
-                    tag_guids.split(',').map(dec).collect::<Result<Vec<_>>>()?
-                };
+                let tag_guids = parse_encoded_list(tag_guids)?;
                 data.notes.insert(
                     guid.clone(),
                     Note {
@@ -360,6 +361,39 @@ fn parse_storage(content: &str) -> Result<StorageData> {
                         largest_resource_mime: parse_optional_string(largest_resource_mime)?,
                         largest_resource_size: parse_optional_usize(largest_resource_size),
                         tag_guids,
+                        ..Note::default()
+                    },
+                );
+            }
+            [
+                "note",
+                guid,
+                title,
+                created,
+                updated,
+                notebook_guid,
+                notebook_name,
+                content_length,
+                largest_resource_mime,
+                largest_resource_size,
+                tag_guids,
+                tag_names,
+            ] => {
+                let guid = dec(guid)?;
+                data.notes.insert(
+                    guid.clone(),
+                    Note {
+                        guid,
+                        title: dec(title)?,
+                        created: parse_optional_i64(created),
+                        updated: parse_optional_i64(updated),
+                        notebook_guid: parse_optional_string(notebook_guid)?,
+                        notebook_name: parse_optional_string(notebook_name)?,
+                        content_length: parse_optional_usize(content_length),
+                        largest_resource_mime: parse_optional_string(largest_resource_mime)?,
+                        largest_resource_size: parse_optional_usize(largest_resource_size),
+                        tag_guids: parse_encoded_list(tag_guids)?,
+                        tag_names: parse_encoded_list(tag_names)?,
                         ..Note::default()
                     },
                 );
@@ -407,6 +441,14 @@ fn parse_optional_usize(value: &str) -> Option<usize> {
         None
     } else {
         value.parse().ok()
+    }
+}
+
+fn parse_encoded_list(value: &str) -> Result<Vec<String>> {
+    if value.is_empty() {
+        Ok(Vec::new())
+    } else {
+        value.split(',').map(dec).collect()
     }
 }
 
@@ -527,6 +569,7 @@ mod tests {
             title: "title".to_string(),
             created: Some(1),
             tag_guids: vec!["tag".to_string()],
+            tag_names: vec!["Tag Name".to_string()],
             ..Note::default()
         };
         storage.set_note(note.clone()).unwrap();
@@ -541,6 +584,7 @@ mod tests {
         let search = loaded.get_search().unwrap();
         assert_eq!(search.notes[0].guid, "guid");
         assert_eq!(search.notes[0].tag_guids, vec!["tag"]);
+        assert_eq!(search.notes[0].tag_names, vec!["Tag Name"]);
         let _ = std::fs::remove_file(path);
     }
 }

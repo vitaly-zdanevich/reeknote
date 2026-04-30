@@ -2,6 +2,14 @@
 name = "reeknote"
 version = "0.1.0"
 edition = "2024"
+description = "Command-line Evernote client"
+license = "GPL-3.0-only"
+repository = "https://gitlab.com/vitaly-zdanevich/reeknote"
+homepage = "https://gitlab.com/vitaly-zdanevich/reeknote"
+readme = "README.md"
+keywords = ["evernote", "geeknote", "notes", "cli", "sync"]
+categories = ["command-line-utilities"]
+include = ["Cargo.lock", "Cargo.toml", "LICENSE", "README.md", "src/**"]
 
 [[bin]]
 name = "reeknote"
