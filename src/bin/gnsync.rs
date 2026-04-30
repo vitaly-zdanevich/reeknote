@@ -2,10 +2,10 @@ use reeknote::config::Config;
 use reeknote::edam_client::EdamClient;
 use reeknote::editor::ImageOptions;
 use reeknote::errors::{ReeknoteError, Result};
-use reeknote::geeknote::{EvernoteClient, NotesService};
 use reeknote::gnsync::{self, SyncFormat};
+use reeknote::reeknote::{EvernoteClient, NotesService};
 use reeknote::storage::Storage;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SyncArgs {
@@ -85,7 +85,7 @@ fn run(args: Vec<String>) -> Result<()> {
 fn download_notebook(
     client: &mut EdamClient,
     notebook: Option<&str>,
-    path: &PathBuf,
+    path: &Path,
     args: &SyncArgs,
 ) -> Result<()> {
     let request =
@@ -199,14 +199,14 @@ fn next_value(iter: &mut impl Iterator<Item = String>, arg: &str) -> Result<Stri
 }
 
 fn auth_token(storage: &Storage) -> Result<String> {
-    if let Ok(token) = std::env::var("EVERNOTE_DEV_TOKEN") {
-        if !token.is_empty() {
-            return Ok(token);
-        }
+    if let Ok(token) = std::env::var("EVERNOTE_DEV_TOKEN")
+        && !token.is_empty()
+    {
+        return Ok(token);
     }
     storage.get_user_token().ok_or_else(|| {
         ReeknoteError::InvalidInput(
-            "not logged in; run `geeknote login` or set EVERNOTE_DEV_TOKEN".to_string(),
+            "not logged in; run `reeknote login` or set EVERNOTE_DEV_TOKEN".to_string(),
         )
     })
 }

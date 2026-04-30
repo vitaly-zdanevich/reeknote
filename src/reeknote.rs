@@ -41,6 +41,7 @@ pub trait EvernoteClient {
     fn get_note(&mut self, guid: &str) -> Result<Note>;
     fn get_note_with_resources(&mut self, guid: &str) -> Result<Note>;
     fn get_note_content(&mut self, guid: &str) -> Result<String>;
+    fn get_note_tag_names(&mut self, guid: &str) -> Result<Vec<String>>;
     fn find_notes(&mut self, query: &str, count: usize, deleted_only: bool)
     -> Result<SearchResult>;
     fn create_note(&mut self, input: ParsedNoteInput) -> Result<Note>;
@@ -82,6 +83,10 @@ impl EvernoteClient for UnsupportedEvernoteClient {
     }
 
     fn get_note_content(&mut self, _guid: &str) -> Result<String> {
+        self.unsupported()
+    }
+
+    fn get_note_tag_names(&mut self, _guid: &str) -> Result<Vec<String>> {
         self.unsupported()
     }
 
@@ -150,15 +155,15 @@ pub fn get_editor(storage: Option<&Storage>) -> String {
     {
         return editor.to_string();
     }
-    if let Ok(editor) = std::env::var("editor") {
-        if !editor.is_empty() {
-            return editor;
-        }
+    if let Ok(editor) = std::env::var("editor")
+        && !editor.is_empty()
+    {
+        return editor;
     }
-    if let Ok(editor) = std::env::var("EDITOR") {
-        if !editor.is_empty() {
-            return editor;
-        }
+    if let Ok(editor) = std::env::var("EDITOR")
+        && !editor.is_empty()
+    {
+        return editor;
     }
     if cfg!(windows) {
         config::DEF_WIN_EDITOR.to_string()
@@ -194,7 +199,7 @@ pub fn settings_output(storage: &mut Storage, config: &Config) -> String {
     let extras = get_extras(Some(storage));
     let note_ext = get_note_ext(storage);
     let mut lines = vec![
-        "Geeknote".to_string(),
+        "Reeknote".to_string(),
         "*".repeat(30),
         format!("Version: {VERSION}"),
         format!("App dir: {}", config.app_dir.display()),
@@ -240,10 +245,10 @@ impl NotesService {
             url,
         };
 
-        if result.title.is_none() {
-            if let Some(note) = note {
-                result.title = Some(note.title.clone());
-            }
+        if result.title.is_none()
+            && let Some(note) = note
+        {
+            result.title = Some(note.title.clone());
         }
 
         if result.content.is_none()
@@ -258,19 +263,19 @@ impl NotesService {
             result.content = Some(config::EDITOR_OPEN.to_string());
         }
 
-        if let Some(content) = result.content.clone() {
-            if content != config::EDITOR_OPEN {
-                let loaded = if Path::new(&content).is_file() {
-                    fs::read_to_string(&content)?
-                } else {
-                    content
-                };
-                result.content = Some(editor::text_to_enml_with_options(
-                    &loaded,
-                    TextFormat::Markdown,
-                    rawmd,
-                ));
-            }
+        if let Some(content) = result.content.clone()
+            && content != config::EDITOR_OPEN
+        {
+            let loaded = if Path::new(&content).is_file() {
+                fs::read_to_string(&content)?
+            } else {
+                content
+            };
+            result.content = Some(editor::text_to_enml_with_options(
+                &loaded,
+                TextFormat::Markdown,
+                rawmd,
+            ));
         }
 
         if let Some(created) = created {
@@ -281,15 +286,16 @@ impl NotesService {
             result.reminder = Some(parse_reminder(&reminder)?);
         }
 
-        if result.url.is_none() {
-            if let Some(note) = note {
-                result.url = note.attributes.source_url.clone();
-            }
+        if result.url.is_none()
+            && let Some(note) = note
+        {
+            result.url = note.attributes.source_url.clone();
         }
 
         Ok(result)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_search_request(
         search: Option<&str>,
         tags: &[String],

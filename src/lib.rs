@@ -3,11 +3,11 @@ pub mod config;
 pub mod edam_client;
 pub mod editor;
 pub mod errors;
-pub mod geeknote;
 pub mod gnsync;
 pub mod models;
 pub mod oauth;
 pub mod out;
+pub mod reeknote;
 pub mod storage;
 pub mod tools;
 

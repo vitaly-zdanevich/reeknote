@@ -1,11 +1,11 @@
 use crate::config::Config;
 use crate::editor;
 use crate::errors::{ReeknoteError, Result};
-use crate::geeknote::{EvernoteClient, ParsedNoteInput, ReminderValue};
 use crate::models::{
     Accounting, LinkedNotebook, Note, NoteAttributes, Notebook, Resource, ResourceData,
     SearchResult, Tag, UserInfo,
 };
+use crate::reeknote::{EvernoteClient, ParsedNoteInput, ReminderValue};
 use evernote::note_store::{
     NoteFilter, NoteStoreSyncClient, NotesMetadataResultSpec, TNoteStoreSyncClient,
 };
@@ -63,7 +63,7 @@ impl EdamClient {
         let mut user_store = self.user_store();
         user_store
             .check_version(
-                "Geeknote Rust/0.1".to_string(),
+                "Reeknote Rust/0.1".to_string(),
                 EDAM_VERSION_MAJOR,
                 EDAM_VERSION_MINOR,
             )
@@ -76,41 +76,12 @@ impl EdamClient {
         count: usize,
         with_resources_data: bool,
     ) -> Result<Vec<Note>> {
-        if linked_notebook.note_store_url.is_empty() {
-            return Err(ReeknoteError::InvalidInput(format!(
-                "linked notebook has no NoteStore URL: {}",
-                linked_notebook.share_name
-            )));
-        }
-        if linked_notebook.share_key.is_empty() {
-            return Err(ReeknoteError::InvalidInput(format!(
-                "linked notebook has no share key/global id: {}",
-                linked_notebook.share_name
-            )));
-        }
-
-        let mut note_store = note_store_for_url(&linked_notebook.note_store_url);
-        let auth = note_store
-            .authenticate_to_shared_notebook(
-                linked_notebook.share_key.clone(),
-                self.auth_token.clone(),
-            )
-            .map_err(map_thrift_error)?;
-        let shared_token = auth.authentication_token;
-        let shared_notebook = note_store
-            .get_shared_notebook_by_auth(shared_token.clone())
-            .map_err(map_thrift_error)?;
-        let notebook_guid = shared_notebook.notebook_guid.ok_or_else(|| {
-            ReeknoteError::External(format!(
-                "Evernote did not return a notebook GUID for linked notebook {}",
-                linked_notebook.share_name
-            ))
-        })?;
+        let mut session = self.linked_session_from_notebook(linked_notebook.clone())?;
         let filter = NoteFilter::new(
             Some(edam_types::NoteSortOrder::UPDATED.0),
             None,
             None::<String>,
-            Some(notebook_guid),
+            Some(session.notebook_guid.clone()),
             None::<Vec<String>>,
             None::<String>,
             None,
@@ -121,9 +92,10 @@ impl EdamClient {
             None::<Vec<u8>>,
             None,
         );
-        let result = note_store
+        let result = session
+            .note_store
             .find_notes_metadata(
-                shared_token.clone(),
+                session.auth_token.clone(),
                 filter,
                 0,
                 count as i32,
@@ -133,9 +105,10 @@ impl EdamClient {
         let mut notes = Vec::new();
         for metadata in result.notes {
             let mut note = note_from_edam(
-                note_store
+                session
+                    .note_store
                     .get_note(
-                        shared_token.clone(),
+                        session.auth_token.clone(),
                         metadata.guid,
                         true,
                         with_resources_data,
@@ -144,10 +117,166 @@ impl EdamClient {
                     )
                     .map_err(map_thrift_error)?,
             );
-            note.notebook_name = Some(linked_notebook.share_name.clone());
+            note.notebook_name = Some(session.linked_notebook.share_name.clone());
             notes.push(note);
         }
         Ok(notes)
+    }
+
+    pub fn create_linked_note(&mut self, notebook_ref: &str, title: &str) -> Result<Note> {
+        let mut session = self.linked_session(notebook_ref)?;
+        let input = ParsedNoteInput {
+            title: Some(title.to_string()),
+            content: Some(editor::text_to_enml("")),
+            notebook: Some(session.notebook_guid.clone()),
+            ..ParsedNoteInput::default()
+        };
+        let note = note_to_edam(input, None)?;
+        let note = session
+            .note_store
+            .create_note(session.auth_token, note)
+            .map_err(map_thrift_error)?;
+        Ok(note_from_edam(note))
+    }
+
+    pub fn find_linked_note(&mut self, notebook_ref: &str, note_ref: &str) -> Result<Note> {
+        let mut session = self.linked_session(notebook_ref)?;
+
+        if looks_like_guid(note_ref) {
+            return session
+                .note_store
+                .get_note(
+                    session.auth_token,
+                    note_ref.to_string(),
+                    true,
+                    false,
+                    false,
+                    false,
+                )
+                .map(note_from_edam)
+                .map_err(map_thrift_error);
+        }
+
+        let filter = NoteFilter::new(
+            Some(edam_types::NoteSortOrder::UPDATED.0),
+            None,
+            None::<String>,
+            Some(session.notebook_guid),
+            None::<Vec<String>>,
+            None::<String>,
+            None,
+            None::<String>,
+            None,
+            None::<String>,
+            None::<String>,
+            None::<Vec<u8>>,
+            None,
+        );
+        let result = session
+            .note_store
+            .find_notes_metadata(
+                session.auth_token.clone(),
+                filter,
+                0,
+                50,
+                metadata_result_spec(),
+            )
+            .map_err(map_thrift_error)?;
+        let note_ref_lower = note_ref.to_lowercase();
+        let matches = result
+            .notes
+            .into_iter()
+            .filter(|note| {
+                note.title
+                    .as_deref()
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .contains(&note_ref_lower)
+            })
+            .collect::<Vec<_>>();
+
+        match matches.as_slice() {
+            [] => Err(ReeknoteError::InvalidInput(
+                "linked note has not been found".to_string(),
+            )),
+            [metadata] => session
+                .note_store
+                .get_note(
+                    session.auth_token,
+                    metadata.guid.clone(),
+                    true,
+                    false,
+                    false,
+                    false,
+                )
+                .map(note_from_edam)
+                .map_err(map_thrift_error),
+            _ => Err(ReeknoteError::InvalidInput(
+                "multiple linked notes match; use the note GUID".to_string(),
+            )),
+        }
+    }
+
+    pub fn update_linked_note_content(
+        &mut self,
+        notebook_ref: &str,
+        note: &Note,
+        content: String,
+    ) -> Result<()> {
+        let mut session = self.linked_session(notebook_ref)?;
+        let input = ParsedNoteInput {
+            title: Some(note.title.clone()),
+            content: Some(content),
+            notebook: Some(session.notebook_guid),
+            ..ParsedNoteInput::default()
+        };
+        let note = note_to_edam(input, Some(note.guid.clone()))?;
+        session
+            .note_store
+            .update_note(session.auth_token, note)
+            .map_err(map_thrift_error)?;
+        Ok(())
+    }
+
+    fn linked_session(&mut self, notebook_ref: &str) -> Result<LinkedSession> {
+        let notebook = resolve_linked_notebook(self.find_linked_notebooks()?, notebook_ref)?;
+        self.linked_session_from_notebook(notebook)
+    }
+
+    fn linked_session_from_notebook(&mut self, notebook: LinkedNotebook) -> Result<LinkedSession> {
+        if notebook.note_store_url.is_empty() {
+            return Err(ReeknoteError::InvalidInput(format!(
+                "linked notebook has no NoteStore URL: {}",
+                notebook.share_name
+            )));
+        }
+        if notebook.share_key.is_empty() {
+            return Err(ReeknoteError::InvalidInput(format!(
+                "linked notebook has no share key/global id: {}",
+                notebook.share_name
+            )));
+        }
+
+        let mut note_store = note_store_for_url(&notebook.note_store_url);
+        let auth = note_store
+            .authenticate_to_shared_notebook(notebook.share_key.clone(), self.auth_token.clone())
+            .map_err(map_thrift_error)?;
+        let shared_notebook = note_store
+            .get_shared_notebook_by_auth(auth.authentication_token.clone())
+            .map_err(map_thrift_error)?;
+        let notebook_guid = shared_notebook.notebook_guid.ok_or_else(|| {
+            ReeknoteError::External(format!(
+                "Evernote did not return a notebook GUID for linked notebook {}",
+                notebook.share_name
+            ))
+        })?;
+
+        Ok(LinkedSession {
+            linked_notebook: notebook,
+            auth_token: auth.authentication_token,
+            notebook_guid,
+            note_store,
+        })
     }
 }
 
@@ -160,6 +289,13 @@ type NoteStore = NoteStoreSyncClient<
     TBinaryInputProtocol<TBufferedReadTransport<HttpReadHalf>>,
     TBinaryOutputProtocol<TBufferedWriteTransport<HttpWriteHalf>>,
 >;
+
+struct LinkedSession {
+    linked_notebook: LinkedNotebook,
+    auth_token: String,
+    notebook_guid: String,
+    note_store: NoteStore,
+}
 
 fn note_store_for_url(url: &str) -> NoteStore {
     let (read, write) = http_halves(url);
@@ -188,6 +324,14 @@ impl EvernoteClient for EdamClient {
         let mut note_store = self.note_store()?;
         note_store
             .get_note_content(token, guid.to_string())
+            .map_err(map_thrift_error)
+    }
+
+    fn get_note_tag_names(&mut self, guid: &str) -> Result<Vec<String>> {
+        let token = self.auth_token.clone();
+        let mut note_store = self.note_store()?;
+        note_store
+            .get_note_tag_names(token, guid.to_string())
             .map_err(map_thrift_error)
     }
 
@@ -612,6 +756,39 @@ fn linked_notebook_from_edam(notebook: edam_types::LinkedNotebook) -> LinkedNote
     }
 }
 
+fn resolve_linked_notebook(
+    notebooks: Vec<LinkedNotebook>,
+    notebook_ref: &str,
+) -> Result<LinkedNotebook> {
+    if looks_like_guid(notebook_ref)
+        && let Some(notebook) = notebooks
+            .iter()
+            .find(|notebook| notebook.guid == notebook_ref)
+            .cloned()
+    {
+        return Ok(notebook);
+    }
+
+    let needle = notebook_ref.to_lowercase();
+    let matches = notebooks
+        .into_iter()
+        .filter(|notebook| notebook.share_name.to_lowercase().contains(&needle))
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [notebook] => Ok(notebook.clone()),
+        [] => Err(ReeknoteError::InvalidInput(format!(
+            "linked notebook not found: {notebook_ref}"
+        ))),
+        _ => Err(ReeknoteError::InvalidInput(format!(
+            "multiple linked notebooks match: {notebook_ref}"
+        ))),
+    }
+}
+
+fn looks_like_guid(value: &str) -> bool {
+    value.len() == 36 && value.chars().filter(|character| *character == '-').count() == 4
+}
+
 fn tag_from_edam(tag: edam_types::Tag) -> Tag {
     Tag {
         guid: tag.guid.unwrap_or_default(),
@@ -829,5 +1006,48 @@ mod tests {
         assert_eq!(linked.share_name, "Shared");
         assert_eq!(linked.share_key, "global");
         assert_eq!(linked.note_store_url, "https://example.test/notestore");
+    }
+
+    #[test]
+    fn resolves_linked_notebook_by_guid_or_partial_name() {
+        let notebooks = vec![
+            LinkedNotebook {
+                guid: "11111111-1111-1111-1111-111111111111".to_string(),
+                share_name: "Personal Shared".to_string(),
+                ..LinkedNotebook::default()
+            },
+            LinkedNotebook {
+                guid: "22222222-2222-2222-2222-222222222222".to_string(),
+                share_name: "Work Shared".to_string(),
+                ..LinkedNotebook::default()
+            },
+        ];
+        assert_eq!(
+            resolve_linked_notebook(notebooks.clone(), "work")
+                .unwrap()
+                .share_name,
+            "Work Shared"
+        );
+        assert_eq!(
+            resolve_linked_notebook(notebooks, "11111111-1111-1111-1111-111111111111")
+                .unwrap()
+                .share_name,
+            "Personal Shared"
+        );
+    }
+
+    #[test]
+    fn rejects_ambiguous_linked_notebook_reference() {
+        let notebooks = vec![
+            LinkedNotebook {
+                share_name: "Shared One".to_string(),
+                ..LinkedNotebook::default()
+            },
+            LinkedNotebook {
+                share_name: "Shared Two".to_string(),
+                ..LinkedNotebook::default()
+            },
+        ];
+        assert!(resolve_linked_notebook(notebooks, "shared").is_err());
     }
 }

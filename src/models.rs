@@ -83,6 +83,7 @@ pub struct Resource {
     pub data: ResourceData,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ListItem {
     Note(Note),

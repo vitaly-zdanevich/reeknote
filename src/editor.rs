@@ -28,21 +28,11 @@ pub struct ImageInfo {
     pub extension: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ImageOptions {
     pub save_images: bool,
     pub images_in_subdir: bool,
     pub base_filename: Option<String>,
-}
-
-impl Default for ImageOptions {
-    fn default() -> Self {
-        Self {
-            save_images: false,
-            images_in_subdir: false,
-            base_filename: None,
-        }
-    }
 }
 
 pub fn html_escape(text: &str) -> String {
@@ -102,10 +92,10 @@ pub fn enml_to_text_with_options(
         .unwrap_or(content_enml)
         .to_string();
 
-    if format == TextFormat::Pre {
-        if let Some(pre) = extract_tag_body(&body, "pre") {
-            return html_unescape(&pre);
-        }
+    if format == TextFormat::Pre
+        && let Some(pre) = extract_tag_body(&body, "pre")
+    {
+        return html_unescape(&pre);
     }
 
     if image_options.save_images {
@@ -156,13 +146,13 @@ pub fn get_images(content_enml: &str) -> Vec<ImageInfo> {
 
         let media_type = attr_value(tag, "type");
         let hash = attr_value(tag, "hash");
-        if let (Some(media_type), Some(hash)) = (media_type, hash) {
-            if let Some(extension) = media_type.strip_prefix("image/") {
-                images.push(ImageInfo {
-                    hash,
-                    extension: extension.to_string(),
-                });
-            }
+        if let (Some(media_type), Some(hash)) = (media_type, hash)
+            && let Some(extension) = media_type.strip_prefix("image/")
+        {
+            images.push(ImageInfo {
+                hash,
+                extension: extension.to_string(),
+            });
         }
     }
 
@@ -468,21 +458,20 @@ fn replace_media_with_images(content: &str, image_options: &ImageOptions, html: 
         let hash = attr_value(tag, "hash");
         if let (Some(media_type), Some(hash), Some(base_filename)) =
             (media_type, hash, image_options.base_filename.as_ref())
+            && let Some(extension) = media_type.strip_prefix("image/")
         {
-            if let Some(extension) = media_type.strip_prefix("image/") {
-                let extension = match extension {
-                    "svg+xml" => "svg",
-                    "jpeg" => "jpg",
-                    value => value,
-                };
-                let source = format!("{base_filename}-{hash}.{extension}");
-                if html {
-                    output.push_str(&format!("<img src=\"{source}\">"));
-                } else {
-                    output.push_str(&format!("![image]({source})"));
-                }
-                continue;
+            let extension = match extension {
+                "svg+xml" => "svg",
+                "jpeg" => "jpg",
+                value => value,
+            };
+            let source = format!("{base_filename}-{hash}.{extension}");
+            if html {
+                output.push_str(&format!("<img src=\"{source}\">"));
+            } else {
+                output.push_str(&format!("![image]({source})"));
             }
+            continue;
         }
         output.push_str("<en-media");
         output.push_str(tag);

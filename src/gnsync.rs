@@ -17,8 +17,9 @@ pub fn remove_control_characters(value: &str) -> String {
         .collect()
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum SyncFormat {
+    #[default]
     Plain,
     Markdown,
     Html,
@@ -42,12 +43,6 @@ impl SyncFormat {
     }
 }
 
-impl Default for SyncFormat {
-    fn default() -> Self {
-        Self::Plain
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SyncFile {
     pub path: PathBuf,
@@ -57,17 +52,17 @@ pub struct SyncFile {
 
 pub fn parse_meta(content: &str) -> BTreeMap<String, String> {
     let mut result = BTreeMap::new();
-    if let Some(rest) = content.strip_prefix("---") {
-        if let Some(end) = rest.find("---") {
-            let meta = &rest[..end];
-            for line in meta.lines() {
-                if let Some((key, value)) = line.split_once(':') {
-                    result.insert(key.trim().to_string(), value.trim().to_string());
-                }
+    if let Some(rest) = content.strip_prefix("---")
+        && let Some(end) = rest.find("---")
+    {
+        let meta = &rest[..end];
+        for line in meta.lines() {
+            if let Some((key, value)) = line.split_once(':') {
+                result.insert(key.trim().to_string(), value.trim().to_string());
             }
-            result.insert("content".to_string(), rest[end + 3..].to_string());
-            return result;
         }
+        result.insert("content".to_string(), rest[end + 3..].to_string());
+        return result;
     }
     result.insert("content".to_string(), content.to_string());
     result
@@ -83,15 +78,14 @@ pub fn files_matching(path: &Path, mask: &str) -> Result<Vec<SyncFile>> {
         let entry = entry?;
         let path = entry.path();
         if path.is_file() {
-            if let Some(extension_filter) = &extension_filter {
-                if path
+            if let Some(extension_filter) = &extension_filter
+                && path
                     .extension()
                     .and_then(|extension| extension.to_str())
                     .map(|extension| format!(".{extension}"))
                     != Some(extension_filter.clone())
-                {
-                    continue;
-                }
+            {
+                continue;
             }
             let metadata = entry.metadata()?;
             let mtime_ms = metadata

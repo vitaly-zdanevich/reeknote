@@ -1,10 +1,14 @@
 use crate::VERSION;
 use crate::config::Config;
 use crate::editor;
-use crate::geeknote::DuplicateGroup;
 use crate::models::{ListItem, Note, UserInfo};
+use crate::reeknote::DuplicateGroup;
 use std::env;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ListOptions {
@@ -27,9 +31,16 @@ pub fn success_message(message: &str) {
     print_line(message);
 }
 
+pub fn with_terminal_animation<T>(message: &str, enabled: bool, action: impl FnOnce() -> T) -> T {
+    let animation = TerminalAnimation::start(message, enabled);
+    let result = action();
+    animation.finish();
+    result
+}
+
 pub fn about() -> String {
     format!(
-        "Version: {VERSION}\nGeeknote - a command line client for Evernote.\nUse geeknote --help to read documentation.\nMain repo: https://github.com/vitaly-zdanevich/geeknote\n"
+        "Version: {VERSION}\nReeknote - a command line client for Evernote.\nUse reeknote --help to read documentation.\n"
     )
 }
 
@@ -244,6 +255,78 @@ fn option_i64(value: Option<i64>) -> String {
         .unwrap_or_else(|| "None".to_string())
 }
 
+struct TerminalAnimation {
+    enabled: bool,
+    finished: bool,
+    stop: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+    width: usize,
+}
+
+impl TerminalAnimation {
+    fn start(message: &str, enabled: bool) -> Self {
+        let enabled = enabled && io::stderr().is_terminal();
+        if enabled {
+            let stop = Arc::new(AtomicBool::new(false));
+            let thread_stop = Arc::clone(&stop);
+            let message = message.to_string();
+            let width = message.chars().count() + 4;
+            let handle = thread::spawn(move || {
+                let frames = ["-", "\\", "|", "/"];
+                let mut index = 0usize;
+                while !thread_stop.load(Ordering::Relaxed) {
+                    let mut stderr = io::stderr();
+                    let _ = write!(stderr, "\r{} {}", frames[index % frames.len()], message);
+                    let _ = stderr.flush();
+                    index += 1;
+                    thread::sleep(Duration::from_millis(90));
+                }
+            });
+            return Self {
+                enabled,
+                finished: false,
+                stop,
+                handle: Some(handle),
+                width,
+            };
+        }
+
+        Self {
+            enabled,
+            finished: false,
+            stop: Arc::new(AtomicBool::new(true)),
+            handle: None,
+            width: 0,
+        }
+    }
+
+    fn finish(mut self) {
+        self.finish_inner();
+    }
+
+    fn finish_inner(&mut self) {
+        if self.finished {
+            return;
+        }
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+        if self.enabled {
+            let mut stderr = io::stderr();
+            let _ = write!(stderr, "\r{}\r", " ".repeat(self.width));
+            let _ = stderr.flush();
+        }
+        self.finished = true;
+    }
+}
+
+impl Drop for TerminalAnimation {
+    fn drop(&mut self) {
+        self.finish_inner();
+    }
+}
+
 fn local_tz_offset_seconds() -> i64 {
     let Ok(tz) = env::var("TZ") else {
         return 0;
@@ -280,7 +363,7 @@ mod tests {
     #[test]
     fn formats_about() {
         assert!(about().contains("Version: 3.0.24"));
-        assert!(about().contains("https://github.com/vitaly-zdanevich/geeknote"));
+        assert!(about().contains("Use reeknote --help"));
     }
 
     #[test]
@@ -333,6 +416,21 @@ mod tests {
         );
         assert!(output.contains("Found 2 items"));
         assert!(output.contains("testnote"));
+    }
+
+    #[test]
+    fn formats_note_tags() {
+        let config = test_config();
+        let note = Note {
+            guid: "12345".to_string(),
+            title: "testnote".to_string(),
+            content: editor::text_to_enml("body"),
+            tag_names: vec!["tag-one".to_string(), "tag-two".to_string()],
+            attributes: NoteAttributes::default(),
+            ..Note::default()
+        };
+        let output = show_note(&note, 111, "s1", &config);
+        assert!(output.contains("Tags: tag-one, tag-two"));
     }
 
     #[test]

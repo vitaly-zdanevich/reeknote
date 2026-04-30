@@ -40,7 +40,7 @@ impl Config {
             .unwrap_or_else(|| PathBuf::from("."));
         let app_dir = env::var_os("REEKNOTE_APP_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| home.join(".geeknote"));
+            .unwrap_or_else(|| home.join(".reeknote"));
 
         if app_dir.exists() {
             // Keep going if this is a file: later storage operations will report
@@ -49,7 +49,7 @@ impl Config {
             let _ = fs::create_dir_all(&app_dir);
         }
 
-        let user_base_url = if env::var("GEEKNOTE_BASE").ok().as_deref() == Some("yinxiang")
+        let user_base_url = if env::var("REEKNOTE_BASE").ok().as_deref() == Some("yinxiang")
             || app_dir.join("isyinxiang").is_file()
         {
             "app.yinxiang.com".to_string()

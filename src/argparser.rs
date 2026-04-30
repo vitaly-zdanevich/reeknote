@@ -251,13 +251,13 @@ impl ArgParser {
                     if let Some(empty_value) = active_spec.empty_value.clone() {
                         insert_value(&mut data, active_spec, empty_value);
                         active = self.argument(command, &item);
-                        if active.is_none() {
-                            if let Some(flag) = self.flag(command, &item) {
-                                data.insert(
-                                    flag.name.to_string(),
-                                    flag.flag_value.clone().unwrap_or(ArgValue::Bool(true)),
-                                );
-                            }
+                        if active.is_none()
+                            && let Some(flag) = self.flag(command, &item)
+                        {
+                            data.insert(
+                                flag.name.to_string(),
+                                flag.flag_value.clone().unwrap_or(ArgValue::Bool(true)),
+                            );
                         }
                         index += 1;
                         continue;
