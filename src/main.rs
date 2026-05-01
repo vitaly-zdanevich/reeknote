@@ -223,7 +223,7 @@ fn handle_find(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
         arg_string(&values, "notebook").as_deref(),
         arg_string(&values, "date").as_deref(),
         arg_bool(&values, "exact_entry"),
-        arg_bool(&values, "content_search"),
+        arg_bool(&values, "content"),
         arg_bool(&values, "ignore_completed"),
         arg_bool(&values, "reminders_only"),
     )?;

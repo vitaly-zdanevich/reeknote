@@ -555,7 +555,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
                     .alt("-cn")
                     .int(),
             )
-            .flag(OptionSpec::flag("--content-search", "Search by content.").alt("-cs"))
+            .flag(OptionSpec::flag("--content", "Search by content.").alt("-cs"))
             .flag(OptionSpec::flag("--exact-entry", "Search exact entry.").alt("-ee"))
             .flag(OptionSpec::flag("--guid", "Show GUIDs.").alt("-id"))
             .flag(OptionSpec::flag("--ignore-completed", "Only unfinished reminders.").alt("-C"))
@@ -783,5 +783,15 @@ mod tests {
             Some(&ArgValue::String("needle".to_string()))
         );
         assert_eq!(values.get("count"), Some(&ArgValue::Int(3)));
+    }
+
+    #[test]
+    fn parses_builtin_find_content_flag() {
+        let parser = ArgParser::default();
+        let outcome = parser.parse(["find", "needle", "--content"]).unwrap();
+        let ParseOutcome::Parsed(values) = outcome else {
+            panic!("expected parsed values");
+        };
+        assert_eq!(values.get("content"), Some(&ArgValue::Bool(true)));
     }
 }

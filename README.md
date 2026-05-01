@@ -290,7 +290,7 @@ reeknote find --search <text to find>
               [--date <date or date range>]
               [--count <how many results to show>]
               [--exact-entry]
-              [--content-search]
+              [--content]
               [--reminders-only]
               [--deleted-only]
               [--ignore-completed]
@@ -323,7 +323,7 @@ Options:
 | `--notebook` | notebook | Filter by notebook. |
 | `--date` | date or range | Filter by date, such as `yyyy-mm-dd` or `yyyy-mm-dd/yyyy-mm-dd`. |
 | `--count` | count | Limit the number of displayed results. |
-| `--content-search` | | Search by note content instead of title. |
+| `--content` | | Search by note content instead of title. |
 | `--exact-entry` | | Search exact entries instead of fuzzy entries. |
 | `--guid` | | Show GUID instead of numeric result index. |
 | `--ignore-completed` | | Include only unfinished reminders. |
@@ -337,7 +337,7 @@ Examples:
 
 ```sh
 reeknote find --search "How to patch KDE2" --notebook "jokes" --date 2015-10-14/2015-10-28
-reeknote find --search "apt-get install apache nginx" --content-search --notebook "manual"
+reeknote find --search "apt-get install apache nginx" --content --notebook "manual"
 ```
 
 ### Notes: Editing Notes
