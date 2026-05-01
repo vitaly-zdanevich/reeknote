@@ -118,6 +118,9 @@ pub fn show_note(note: &Note, user_id: i64, shard_id: &str, config: &Config) -> 
         "Notebook: {}\n",
         note.notebook_name.clone().unwrap_or_default()
     ));
+    if !note.tag_names.is_empty() {
+        output.push_str(&format!("Tags: {}\n", note.tag_names.join(", ")));
+    }
     output.push_str(&format!("Created: {}\n", print_date(note.created)));
     output.push_str(&format!("Updated: {}\n", print_date(note.updated)));
     if let Some(source_url) = &note.attributes.source_url {
@@ -137,9 +140,6 @@ pub fn show_note(note: &Note, user_id: i64, shard_id: &str, config: &Config) -> 
         print_date(note.attributes.reminder_done_time)
     ));
     output.push_str(&separator('-', "CONTENT"));
-    if !note.tag_names.is_empty() {
-        output.push_str(&format!("Tags: {}\n", note.tag_names.join(", ")));
-    }
     output.push_str(&editor::enml_to_text(&note.content));
     output
 }
@@ -431,6 +431,8 @@ mod tests {
         };
         let output = show_note(&note, 111, "s1", &config);
         assert!(output.contains("Tags: tag-one, tag-two"));
+        assert!(output.find("Notebook:").unwrap() < output.find("Tags:").unwrap());
+        assert!(output.find("Tags:").unwrap() < output.find("Created:").unwrap());
     }
 
     #[test]

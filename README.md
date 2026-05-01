@@ -416,6 +416,23 @@ Found 2 items
   2 : Gift Shopping List
 
 $ reeknote show 2
+################### URL ###################
+NoteLink: evernote:///view/111/s1/note-guid/note-guid/
+WebClientURL: https://www.evernote.com/shard/s1/nl/111/note-guid
+################## TITLE ##################
+Gift Shopping List
+=================== META ==================
+Notebook: Personal
+Tags: shopping, gifts
+Created: 2015-02-22
+Updated: 2015-02-24
+||||||||||||||| REMINDERS |||||||||||||||||
+Order: None
+Time: None
+Done: None
+---------------- CONTENT -----------------
+Coffee
+Chocolate
 ```
 
 Raw ENML output:
