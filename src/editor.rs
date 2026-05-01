@@ -132,6 +132,7 @@ fn enml_to_text_internal(
     body = replace_code_blocks(&body, terminal_styles);
     body = replace_inline_code(&body, terminal_styles);
     body = replace_quote_blocks(&body, terminal_styles);
+    body = replace_italic_text(&body, terminal_styles);
     body = convert_todos_to_markdown(&body);
     body = replace_simple_tag(&body, "h1", |inner| {
         format!("# {}\n\n", html_unescape(inner).trim())
@@ -144,9 +145,6 @@ fn enml_to_text_internal(
     });
     body = replace_simple_tag(&body, "strong", |inner| {
         format!("**{}**", html_unescape(inner).trim())
-    });
-    body = replace_simple_tag(&body, "em", |inner| {
-        format!("_{}_", html_unescape(inner).trim())
     });
     body = replace_paragraphs(&body);
     body = replace_divs(&body);
@@ -502,6 +500,24 @@ fn replace_quote_blocks(content: &str, terminal_styles: bool) -> String {
     })
 }
 
+fn replace_italic_text(content: &str, terminal_styles: bool) -> String {
+    let content = replace_tag_blocks(
+        content,
+        "em",
+        |_| true,
+        |inner| format_italic_text(inner, terminal_styles),
+    );
+    let content = replace_tag_blocks(
+        &content,
+        "i",
+        |_| true,
+        |inner| format_italic_text(inner, terminal_styles),
+    );
+    replace_tag_blocks(&content, "span", is_italic_tag, |inner| {
+        format_italic_text(inner, terminal_styles)
+    })
+}
+
 fn is_evernote_codeblock_tag(open_tag: &str) -> bool {
     let open_tag = open_tag.to_ascii_lowercase();
     open_tag.contains("-en-codeblock")
@@ -517,6 +533,11 @@ fn is_evernote_quote_tag(open_tag: &str) -> bool {
     }
     open_tag.contains("border-left")
         && (open_tag.contains("padding-left") || open_tag.contains("margin-left"))
+}
+
+fn is_italic_tag(open_tag: &str) -> bool {
+    let open_tag = open_tag.to_ascii_lowercase().replace(' ', "");
+    open_tag.contains("font-style:italic")
 }
 
 fn format_code_block(inner: &str, highlight_code: bool) -> String {
@@ -594,6 +615,20 @@ fn highlighted_quote_block(quote: &str) -> String {
     }
     output.push('\n');
     output
+}
+
+fn format_italic_text(inner: &str, terminal_styles: bool) -> String {
+    let text = code_text_from_html(inner);
+    let text = text.trim();
+    if text.is_empty() {
+        return String::new();
+    }
+
+    if terminal_styles {
+        format!("\x1b[3m{text}\x1b[0m")
+    } else {
+        format!("_{text}_")
+    }
 }
 
 fn code_text_from_html(content: &str) -> String {
@@ -937,6 +972,25 @@ mod tests {
     fn converts_inline_code_to_markdown_code() {
         let text = enml_to_text(&wrap_enml("<div>Run <code>cargo test</code></div>"));
         assert_eq!(text, "Run `cargo test`\n\n");
+    }
+
+    #[test]
+    fn converts_i_tags_to_markdown_italic() {
+        let text = enml_to_text(&wrap_enml("<div>This is <i>important</i></div>"));
+        assert_eq!(text, "This is _important_\n\n");
+    }
+
+    #[test]
+    fn converts_styled_spans_to_markdown_italic() {
+        let html = r#"<div>This is <span style="font-style: italic;">important</span></div>"#;
+        let text = enml_to_text(&wrap_enml(html));
+        assert_eq!(text, "This is _important_\n\n");
+    }
+
+    #[test]
+    fn highlights_italic_for_terminal_output() {
+        let text = enml_to_terminal_text(&wrap_enml("<div>This is <i>important</i></div>"));
+        assert_eq!(text, "This is \x1b[3mimportant\x1b[0m\n\n");
     }
 
     #[test]
