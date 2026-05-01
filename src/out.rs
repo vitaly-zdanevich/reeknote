@@ -182,8 +182,8 @@ pub fn print_list(
         } else {
             String::new()
         };
-        let tags = if options.show_tags && !item.tag_guids().is_empty() {
-            item.tag_guids()
+        let tags = if options.show_tags && !item.tag_names().is_empty() {
+            item.tag_names()
                 .iter()
                 .map(|tag| format!(" #{tag}"))
                 .collect::<String>()
@@ -433,6 +433,29 @@ mod tests {
         assert!(output.contains("Tags: tag-one, tag-two"));
         assert!(output.find("Notebook:").unwrap() < output.find("Tags:").unwrap());
         assert!(output.find("Tags:").unwrap() < output.find("Created:").unwrap());
+    }
+
+    #[test]
+    fn formats_note_list_tag_names() {
+        let config = test_config();
+        let note = Note {
+            guid: "12345".to_string(),
+            title: "testnote".to_string(),
+            tag_guids: vec!["tag-guid".to_string()],
+            tag_names: vec!["project".to_string()],
+            ..Note::default()
+        };
+        let output = print_list(
+            &[ListItem::Note(note)],
+            "",
+            ListOptions {
+                show_tags: true,
+                ..ListOptions::default()
+            },
+            &config,
+        );
+        assert!(output.contains("testnote #project"));
+        assert!(!output.contains("#tag-guid"));
     }
 
     #[test]

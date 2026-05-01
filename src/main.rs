@@ -241,6 +241,9 @@ fn handle_find(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
             }
         }
     }
+    if arg_bool(&values, "with_tags") {
+        hydrate_note_list_tag_names(storage, &mut client, &mut result.notes)?;
+    }
     for note in &result.notes {
         storage.set_note(note.clone())?;
     }
@@ -891,6 +894,52 @@ fn cached_tag_names(storage: &Storage, note: &Note) -> Option<Vec<String>> {
         .collect()
 }
 
+fn hydrate_note_list_tag_names(
+    storage: &mut Storage,
+    client: &mut EdamClient,
+    notes: &mut [Note],
+) -> Result<()> {
+    if !notes_need_tag_name_lookup(notes) {
+        return Ok(());
+    }
+
+    if cache_is_fresh(storage, TAGS_CACHE_UPDATED_AT) {
+        let tags = storage.get_tags();
+        apply_tag_names_to_notes(notes, &tags);
+        if !notes_need_tag_name_lookup(notes) {
+            return Ok(());
+        }
+    }
+
+    let tags = client.find_tags()?;
+    cache_tags(storage, &tags)?;
+    let tags = storage.get_tags();
+    apply_tag_names_to_notes(notes, &tags);
+    Ok(())
+}
+
+fn notes_need_tag_name_lookup(notes: &[Note]) -> bool {
+    notes
+        .iter()
+        .any(|note| note.tag_guids.len() > note.tag_names.len())
+}
+
+fn apply_tag_names_to_notes(notes: &mut [Note], tags: &BTreeMap<String, String>) {
+    for note in notes
+        .iter_mut()
+        .filter(|note| note.tag_guids.len() > note.tag_names.len())
+    {
+        let tag_names = note
+            .tag_guids
+            .iter()
+            .filter_map(|guid| tags.get(guid).cloned())
+            .collect::<Vec<_>>();
+        if !tag_names.is_empty() {
+            note.tag_names = tag_names;
+        }
+    }
+}
+
 fn cached_notebook_name(storage: &Storage, note: &Note) -> Option<String> {
     if cache_is_fresh(storage, NOTEBOOKS_CACHE_UPDATED_AT) {
         return note
@@ -1118,6 +1167,44 @@ mod tests {
         assert_eq!(
             cached_tag_names(&storage, &note).unwrap(),
             vec!["project".to_string()]
+        );
+    }
+
+    #[test]
+    fn detects_notes_missing_tag_names() {
+        let notes = vec![Note {
+            tag_guids: vec!["tag-guid".to_string()],
+            ..Note::default()
+        }];
+        assert!(notes_need_tag_name_lookup(&notes));
+    }
+
+    #[test]
+    fn keeps_notes_with_existing_tag_names() {
+        let notes = vec![Note {
+            tag_guids: vec!["tag-guid".to_string()],
+            tag_names: vec!["project".to_string()],
+            ..Note::default()
+        }];
+        assert!(!notes_need_tag_name_lookup(&notes));
+    }
+
+    #[test]
+    fn applies_tag_names_to_note_list() {
+        let mut notes = vec![Note {
+            tag_guids: vec!["tag-guid".to_string(), "other-guid".to_string()],
+            ..Note::default()
+        }];
+        apply_tag_names_to_notes(
+            &mut notes,
+            &BTreeMap::from([
+                ("tag-guid".to_string(), "project".to_string()),
+                ("other-guid".to_string(), "work".to_string()),
+            ]),
+        );
+        assert_eq!(
+            notes[0].tag_names,
+            vec!["project".to_string(), "work".to_string()]
         );
     }
 }

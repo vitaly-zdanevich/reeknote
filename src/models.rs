@@ -138,4 +138,11 @@ impl ListItem {
             _ => &[],
         }
     }
+
+    pub fn tag_names(&self) -> &[String] {
+        match self {
+            Self::Note(item) => &item.tag_names,
+            _ => &[],
+        }
+    }
 }
