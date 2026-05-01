@@ -80,13 +80,36 @@ pub fn text_to_enml_with_options(content: &str, format: TextFormat, rawmd: bool)
 }
 
 pub fn enml_to_text(content_enml: &str) -> String {
-    enml_to_text_with_options(content_enml, TextFormat::Markdown, &ImageOptions::default())
+    enml_to_text_internal(
+        content_enml,
+        TextFormat::Markdown,
+        &ImageOptions::default(),
+        false,
+    )
+}
+
+pub fn enml_to_terminal_text(content_enml: &str) -> String {
+    enml_to_text_internal(
+        content_enml,
+        TextFormat::Markdown,
+        &ImageOptions::default(),
+        true,
+    )
 }
 
 pub fn enml_to_text_with_options(
     content_enml: &str,
     format: TextFormat,
     image_options: &ImageOptions,
+) -> String {
+    enml_to_text_internal(content_enml, format, image_options, false)
+}
+
+fn enml_to_text_internal(
+    content_enml: &str,
+    format: TextFormat,
+    image_options: &ImageOptions,
+    highlight_code: bool,
 ) -> String {
     let mut body = en_note_body(content_enml)
         .unwrap_or(content_enml)
@@ -106,6 +129,8 @@ pub fn enml_to_text_with_options(
         return body;
     }
 
+    body = replace_code_blocks(&body, highlight_code);
+    body = replace_inline_code(&body, highlight_code);
     body = convert_todos_to_markdown(&body);
     body = replace_simple_tag(&body, "h1", |inner| {
         format!("# {}\n\n", html_unescape(inner).trim())
@@ -430,6 +455,222 @@ fn replace_divs(content: &str) -> String {
     })
 }
 
+fn replace_code_blocks(content: &str, highlight_code: bool) -> String {
+    let content = replace_tag_blocks(content, "div", is_evernote_codeblock_tag, |inner| {
+        format_code_block(inner, highlight_code)
+    });
+    replace_tag_blocks(
+        &content,
+        "pre",
+        |_| true,
+        |inner| format_code_block(inner, highlight_code),
+    )
+}
+
+fn replace_inline_code(content: &str, highlight_code: bool) -> String {
+    replace_tag_blocks(
+        content,
+        "code",
+        |_| true,
+        |inner| {
+            let code = code_text_from_html(inner);
+            if highlight_code {
+                format!("\x1b[38;5;81m{}\x1b[0m", code.trim())
+            } else {
+                format!("`{}`", code.trim())
+            }
+        },
+    )
+}
+
+fn is_evernote_codeblock_tag(open_tag: &str) -> bool {
+    let open_tag = open_tag.to_ascii_lowercase();
+    open_tag.contains("-en-codeblock")
+        || (open_tag.contains("font-family")
+            && open_tag.contains("monospace")
+            && open_tag.contains("background-color"))
+}
+
+fn format_code_block(inner: &str, highlight_code: bool) -> String {
+    let code = code_text_from_html(inner);
+    let code = code.trim_matches('\n');
+    if code.trim().is_empty() {
+        return String::new();
+    }
+
+    if highlight_code {
+        return highlighted_code_block(code);
+    }
+
+    format!("```\n{code}\n```\n\n")
+}
+
+fn highlighted_code_block(code: &str) -> String {
+    let width = code
+        .lines()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or_default();
+    let mut output = String::new();
+    for line in code.lines() {
+        let padding = width.saturating_sub(line.chars().count()) + 1;
+        output.push_str("\x1b[48;5;236;38;5;252m ");
+        output.push_str(line);
+        output.push_str(&" ".repeat(padding));
+        output.push_str("\x1b[0m\n");
+    }
+    output.push('\n');
+    output
+}
+
+fn code_text_from_html(content: &str) -> String {
+    let content = strip_intertag_whitespace(content);
+    let mut output = String::new();
+    let mut tag = String::new();
+    let mut in_tag = false;
+
+    for character in content.chars() {
+        if in_tag {
+            tag.push(character);
+            if character == '>' {
+                append_code_tag_spacing(&mut output, &tag);
+                tag.clear();
+                in_tag = false;
+            }
+        } else if character == '<' {
+            tag.push(character);
+            in_tag = true;
+        } else {
+            output.push(character);
+        }
+    }
+
+    if !tag.is_empty() {
+        output.push_str(&tag);
+    }
+
+    html_unescape(&output)
+}
+
+fn append_code_tag_spacing(output: &mut String, tag: &str) {
+    let tag = tag.to_ascii_lowercase();
+    let tag = tag.trim();
+    if tag.starts_with("<br") || tag.starts_with("</div") || tag.starts_with("</p") {
+        output.push('\n');
+    }
+}
+
+fn strip_intertag_whitespace(content: &str) -> String {
+    let mut output = String::new();
+    let mut rest = content;
+
+    while let Some(end) = rest.find('>') {
+        let end = end + 1;
+        output.push_str(&rest[..end]);
+        rest = &rest[end..];
+
+        let Some(next_start) = rest.find('<') else {
+            output.push_str(rest);
+            return output;
+        };
+        let between = &rest[..next_start];
+        if !between.trim().is_empty() {
+            output.push_str(between);
+        }
+        rest = &rest[next_start..];
+    }
+
+    output.push_str(rest);
+    output
+}
+
+fn replace_tag_blocks<P, F>(content: &str, tag: &str, predicate: P, formatter: F) -> String
+where
+    P: Fn(&str) -> bool,
+    F: Fn(&str) -> String,
+{
+    let mut output = String::new();
+    let mut rest = content;
+
+    while let Some((open_start, open_end, open_tag)) = find_open_tag(rest, tag) {
+        output.push_str(&rest[..open_start]);
+        if predicate(open_tag) {
+            let body_start = open_end;
+            let Some((body_end, close_end)) = find_matching_close_tag(rest, tag, body_start) else {
+                output.push_str(&rest[open_start..]);
+                return output;
+            };
+            output.push_str(&formatter(&rest[body_start..body_end]));
+            rest = &rest[close_end..];
+        } else {
+            output.push_str(&rest[open_start..open_end]);
+            rest = &rest[open_end..];
+        }
+    }
+
+    output.push_str(rest);
+    output
+}
+
+fn find_open_tag<'a>(content: &'a str, tag: &str) -> Option<(usize, usize, &'a str)> {
+    let needle = format!("<{tag}");
+    let mut offset = 0;
+    while let Some(relative_start) = content[offset..].find(&needle) {
+        let start = offset + relative_start;
+        let name_end = start + needle.len();
+        let next = content[name_end..].chars().next();
+        if next.is_some_and(|character| matches!(character, '>' | '/' | ' ' | '\t' | '\n')) {
+            let relative_end = content[name_end..].find('>')?;
+            let end = name_end + relative_end + 1;
+            return Some((start, end, &content[start..end]));
+        }
+        offset = name_end;
+    }
+    None
+}
+
+fn find_matching_close_tag(content: &str, tag: &str, body_start: usize) -> Option<(usize, usize)> {
+    let close_needle = format!("</{tag}>");
+    let mut depth = 1usize;
+    let mut cursor = body_start;
+
+    while cursor < content.len() {
+        let next_open = find_open_tag(&content[cursor..], tag)
+            .map(|(start, end, open_tag)| (cursor + start, cursor + end, open_tag.ends_with("/>")));
+        let next_close = content[cursor..]
+            .find(&close_needle)
+            .map(|start| cursor + start);
+
+        match (next_open, next_close) {
+            (Some((open_start, open_end, self_closing)), Some(close_start))
+                if open_start < close_start =>
+            {
+                if !self_closing {
+                    depth += 1;
+                }
+                cursor = open_end;
+            }
+            (_, Some(close_start)) => {
+                depth -= 1;
+                let close_end = close_start + close_needle.len();
+                if depth == 0 {
+                    return Some((close_start, close_end));
+                }
+                cursor = close_end;
+            }
+            (Some((_, open_end, self_closing)), None) => {
+                if !self_closing {
+                    depth += 1;
+                }
+                cursor = open_end;
+            }
+            (None, None) => return None,
+        }
+    }
+
+    None
+}
+
 fn convert_todos_to_markdown(content: &str) -> String {
     let mut output = content.replace("<en-todo checked=\"true\"></en-todo>", "* [x]");
     output = output.replace("<en-todo checked=\"true\"/>", "* [x]");
@@ -602,6 +843,38 @@ mod tests {
             &options,
         );
         assert!(html.contains("<img src=\"Note-abc.png\">"));
+    }
+
+    #[test]
+    fn converts_pre_blocks_to_markdown_code_blocks() {
+        let text = enml_to_text(&wrap_enml("<pre>let answer = 42;</pre>"));
+        assert_eq!(text, "```\nlet answer = 42;\n```\n\n");
+    }
+
+    #[test]
+    fn converts_inline_code_to_markdown_code() {
+        let text = enml_to_text(&wrap_enml("<div>Run <code>cargo test</code></div>"));
+        assert_eq!(text, "Run `cargo test`\n");
+    }
+
+    #[test]
+    fn converts_evernote_codeblock_divs_to_markdown_code_blocks() {
+        let html = r#"<div style="box-sizing: border-box; font-family: Monaco, Menlo, Consolas, &quot;Courier New&quot;, monospace; background-color: rgb(251, 250, 248); -en-codeblock:true;"><div>fn main() {</div><div>    println!(&quot;ok&quot;);</div><div>}</div></div>"#;
+        let text = enml_to_text(&wrap_enml(html));
+        assert_eq!(text, "```\nfn main() {\n    println!(\"ok\");\n}\n```\n\n");
+    }
+
+    #[test]
+    fn highlights_code_blocks_for_terminal_output() {
+        let text = enml_to_terminal_text(&wrap_enml("<pre>let answer = 42;</pre>"));
+        assert!(text.contains("\x1b[48;5;236;38;5;252m let answer = 42; \x1b[0m"));
+        assert!(!text.contains("```"));
+    }
+
+    #[test]
+    fn highlights_inline_code_for_terminal_output() {
+        let text = enml_to_terminal_text(&wrap_enml("<div>Run <code>cargo test</code></div>"));
+        assert_eq!(text, "Run \x1b[38;5;81mcargo test\x1b[0m\n");
     }
 
     #[test]

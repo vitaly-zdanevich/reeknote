@@ -388,6 +388,10 @@ Output any note in the terminal with `show`. Reeknote can show a note by title,
 GUID, or previous search result ID. If a search finds multiple notes, Reeknote
 asks you to choose.
 
+When output goes to an interactive terminal, Reeknote visually highlights
+Evernote code blocks and inline code. Redirected output stays plain Markdown
+text.
+
 Synopsis:
 
 ```sh

@@ -19,6 +19,11 @@ pub struct ListOptions {
     pub show_guid: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ShowOptions {
+    pub highlight_code: bool,
+}
+
 pub fn print_line(line: &str) {
     let _ = writeln!(io::stdout(), "{line}");
 }
@@ -100,6 +105,16 @@ pub fn show_user(user: &UserInfo, full_info: bool) -> String {
 }
 
 pub fn show_note(note: &Note, user_id: i64, shard_id: &str, config: &Config) -> String {
+    show_note_with_options(note, user_id, shard_id, config, ShowOptions::default())
+}
+
+pub fn show_note_with_options(
+    note: &Note,
+    user_id: i64,
+    shard_id: &str,
+    config: &Config,
+    options: ShowOptions,
+) -> String {
     let mut output = separator('#', "URL");
     let note_link = config
         .note_link
@@ -140,7 +155,11 @@ pub fn show_note(note: &Note, user_id: i64, shard_id: &str, config: &Config) -> 
         print_date(note.attributes.reminder_done_time)
     ));
     output.push_str(&separator('-', "CONTENT"));
-    output.push_str(&editor::enml_to_text(&note.content));
+    if options.highlight_code {
+        output.push_str(&editor::enml_to_terminal_text(&note.content));
+    } else {
+        output.push_str(&editor::enml_to_text(&note.content));
+    }
     output
 }
 
@@ -433,6 +452,28 @@ mod tests {
         assert!(output.contains("Tags: tag-one, tag-two"));
         assert!(output.find("Notebook:").unwrap() < output.find("Tags:").unwrap());
         assert!(output.find("Tags:").unwrap() < output.find("Created:").unwrap());
+    }
+
+    #[test]
+    fn formats_note_code_blocks_for_terminal() {
+        let config = test_config();
+        let note = Note {
+            guid: "12345".to_string(),
+            title: "testnote".to_string(),
+            content: editor::wrap_enml("<pre>let answer = 42;</pre>"),
+            attributes: NoteAttributes::default(),
+            ..Note::default()
+        };
+        let output = show_note_with_options(
+            &note,
+            111,
+            "s1",
+            &config,
+            ShowOptions {
+                highlight_code: true,
+            },
+        );
+        assert!(output.contains("\x1b[48;5;236;38;5;252m let answer = 42; \x1b[0m"));
     }
 
     #[test]

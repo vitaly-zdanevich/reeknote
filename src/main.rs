@@ -10,7 +10,7 @@ use reeknote::reeknote as app;
 use reeknote::reeknote::{EvernoteClient, NotesService};
 use reeknote::storage::Storage;
 use std::collections::BTreeMap;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const METADATA_CACHE_TTL_SECONDS: i64 = 3_600;
@@ -306,7 +306,18 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
         print!("{}", note.content);
     } else {
         let user = user.unwrap_or_default();
-        print!("{}", out::show_note(&note, user.id, &user.shard_id, config));
+        print!(
+            "{}",
+            out::show_note_with_options(
+                &note,
+                user.id,
+                &user.shard_id,
+                config,
+                out::ShowOptions {
+                    highlight_code: io::stdout().is_terminal(),
+                },
+            )
+        );
     }
     Ok(())
 }
