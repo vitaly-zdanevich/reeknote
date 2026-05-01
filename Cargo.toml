@@ -9,7 +9,7 @@ homepage = "https://gitlab.com/vitaly-zdanevich/reeknote"
 readme = "README.md"
 keywords = ["evernote", "geeknote", "notes", "cli", "sync", "reeknote", "obsidian", "notesnook", "personal_database", "bending_spoons"]
 categories = ["command-line-utilities"]
-include = ["Cargo.lock", "Cargo.toml", "LICENSE", "README.md", "src/**"]
+include = ["Cargo.lock", "Cargo.toml", "LICENSE", "README.md", "src/**", "tests/**"]
 
 [[bin]]
 name = "reeknote"

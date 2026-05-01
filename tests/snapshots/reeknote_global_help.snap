@@ -1,0 +1,24 @@
+status: 0
+--- stdout ---
+Available commands:
+         create : Create note in Evernote.
+  create-linked : Create linked note in Evernote.
+          dedup : Preview duplicate notes without removing them.
+           edit : Edit note in Evernote.
+    edit-linked : Edit linked note.
+           find : Search notes in Evernote.
+          login : Authorize in Evernote.
+         logout : Logout from Evernote.
+notebook-create : Create notebook.
+  notebook-edit : Rename notebook.
+  notebook-list : Show notebooks.
+notebook-remove : Remove notebook.
+         remove : Remove note from Evernote.
+       settings : Show and edit current settings.
+           show : Output note in the terminal.
+     tag-create : Create tag.
+       tag-edit : Rename tag.
+       tag-list : Show tags.
+     tag-remove : Remove tag.
+           user : Show information about active user.
+--- stderr ---

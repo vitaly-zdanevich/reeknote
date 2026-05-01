@@ -1,0 +1,11 @@
+status: 0
+--- stdout ---
+Reeknote
+******************************
+Version: 3.0.24
+App dir: <APP_DIR>
+Error log: <APP_DIR>/error.log
+Editor: nano
+Markdown2 Extras: None
+Note extension: [".markdown", ".org"]
+--- stderr ---

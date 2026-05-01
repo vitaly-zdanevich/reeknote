@@ -1,0 +1,20 @@
+status: 0
+--- stdout ---
+Options for: find
+Available arguments:
+          --search : [default] Text to search.
+             --tag : Tag sought on the notes.
+        --notebook : Notebook containing the notes.
+            --date : Date or date range.
+           --count : How many notes to show.
+Available flags:
+         --content : Search by content.
+     --exact-entry : Search exact entry.
+            --guid : Show GUIDs.
+--ignore-completed : Only unfinished reminders.
+  --reminders-only : Only notes with reminders.
+    --deleted-only : Only deleted notes.
+   --with-notebook : Show notebook names.
+       --with-tags : Show tags.
+        --with-url : Show web URLs.
+--- stderr ---
