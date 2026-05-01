@@ -389,8 +389,8 @@ GUID, or previous search result ID. If a search finds multiple notes, Reeknote
 asks you to choose.
 
 When output goes to an interactive terminal, Reeknote visually highlights
-Evernote code blocks, inline code, quote blocks, and italic text. Redirected
-output stays plain Markdown text.
+Evernote code blocks, inline code, quote blocks, italic text, and bold text.
+Redirected output stays plain Markdown text.
 
 Synopsis:
 

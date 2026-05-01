@@ -133,6 +133,7 @@ fn enml_to_text_internal(
     body = replace_inline_code(&body, terminal_styles);
     body = replace_quote_blocks(&body, terminal_styles);
     body = replace_italic_text(&body, terminal_styles);
+    body = replace_bold_text(&body, terminal_styles);
     body = convert_todos_to_markdown(&body);
     body = replace_simple_tag(&body, "h1", |inner| {
         format!("# {}\n\n", html_unescape(inner).trim())
@@ -142,9 +143,6 @@ fn enml_to_text_internal(
     });
     body = replace_simple_tag(&body, "h3", |inner| {
         format!("### {}\n\n", html_unescape(inner).trim())
-    });
-    body = replace_simple_tag(&body, "strong", |inner| {
-        format!("**{}**", html_unescape(inner).trim())
     });
     body = replace_paragraphs(&body);
     body = replace_divs(&body);
@@ -518,6 +516,24 @@ fn replace_italic_text(content: &str, terminal_styles: bool) -> String {
     })
 }
 
+fn replace_bold_text(content: &str, terminal_styles: bool) -> String {
+    let content = replace_tag_blocks(
+        content,
+        "strong",
+        |_| true,
+        |inner| format_bold_text(inner, terminal_styles),
+    );
+    let content = replace_tag_blocks(
+        &content,
+        "b",
+        |_| true,
+        |inner| format_bold_text(inner, terminal_styles),
+    );
+    replace_tag_blocks(&content, "span", is_bold_tag, |inner| {
+        format_bold_text(inner, terminal_styles)
+    })
+}
+
 fn is_evernote_codeblock_tag(open_tag: &str) -> bool {
     let open_tag = open_tag.to_ascii_lowercase();
     open_tag.contains("-en-codeblock")
@@ -538,6 +554,20 @@ fn is_evernote_quote_tag(open_tag: &str) -> bool {
 fn is_italic_tag(open_tag: &str) -> bool {
     let open_tag = open_tag.to_ascii_lowercase().replace(' ', "");
     open_tag.contains("font-style:italic")
+}
+
+fn is_bold_tag(open_tag: &str) -> bool {
+    let open_tag = open_tag.to_ascii_lowercase().replace(' ', "");
+    [
+        "font-weight:bold",
+        "font-weight:bolder",
+        "font-weight:600",
+        "font-weight:700",
+        "font-weight:800",
+        "font-weight:900",
+    ]
+    .iter()
+    .any(|needle| open_tag.contains(needle))
 }
 
 fn format_code_block(inner: &str, highlight_code: bool) -> String {
@@ -628,6 +658,20 @@ fn format_italic_text(inner: &str, terminal_styles: bool) -> String {
         format!("\x1b[3m{text}\x1b[0m")
     } else {
         format!("_{text}_")
+    }
+}
+
+fn format_bold_text(inner: &str, terminal_styles: bool) -> String {
+    let text = code_text_from_html(inner);
+    let text = text.trim();
+    if text.is_empty() {
+        return String::new();
+    }
+
+    if terminal_styles {
+        format!("\x1b[1m{text}\x1b[0m")
+    } else {
+        format!("**{text}**")
     }
 }
 
@@ -991,6 +1035,32 @@ mod tests {
     fn highlights_italic_for_terminal_output() {
         let text = enml_to_terminal_text(&wrap_enml("<div>This is <i>important</i></div>"));
         assert_eq!(text, "This is \x1b[3mimportant\x1b[0m\n\n");
+    }
+
+    #[test]
+    fn converts_b_tags_to_markdown_bold() {
+        let text = enml_to_text(&wrap_enml("<div>This is <b>important</b></div>"));
+        assert_eq!(text, "This is **important**\n\n");
+    }
+
+    #[test]
+    fn converts_styled_spans_to_markdown_bold() {
+        let html = r#"<div>This is <span style="font-weight: bold;">important</span></div>"#;
+        let text = enml_to_text(&wrap_enml(html));
+        assert_eq!(text, "This is **important**\n\n");
+    }
+
+    #[test]
+    fn converts_numeric_font_weight_to_markdown_bold() {
+        let html = r#"<div>This is <span style="font-weight: 700;">important</span></div>"#;
+        let text = enml_to_text(&wrap_enml(html));
+        assert_eq!(text, "This is **important**\n\n");
+    }
+
+    #[test]
+    fn highlights_bold_for_terminal_output() {
+        let text = enml_to_terminal_text(&wrap_enml("<div>This is <b>important</b></div>"));
+        assert_eq!(text, "This is \x1b[1mimportant\x1b[0m\n\n");
     }
 
     #[test]
