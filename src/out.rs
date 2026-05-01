@@ -21,7 +21,7 @@ pub struct ListOptions {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ShowOptions {
-    pub highlight_code: bool,
+    pub terminal_styles: bool,
 }
 
 pub fn print_line(line: &str) {
@@ -155,7 +155,7 @@ pub fn show_note_with_options(
         print_date(note.attributes.reminder_done_time)
     ));
     output.push_str(&separator('-', "CONTENT"));
-    if options.highlight_code {
+    if options.terminal_styles {
         output.push_str(&editor::enml_to_terminal_text(&note.content));
     } else {
         output.push_str(&editor::enml_to_text(&note.content));
@@ -470,10 +470,32 @@ mod tests {
             "s1",
             &config,
             ShowOptions {
-                highlight_code: true,
+                terminal_styles: true,
             },
         );
         assert!(output.contains("\x1b[48;5;236;38;5;252m let answer = 42; \x1b[0m"));
+    }
+
+    #[test]
+    fn formats_note_quotes_for_terminal() {
+        let config = test_config();
+        let note = Note {
+            guid: "12345".to_string(),
+            title: "testnote".to_string(),
+            content: editor::wrap_enml("<blockquote>Quoted line</blockquote>"),
+            attributes: NoteAttributes::default(),
+            ..Note::default()
+        };
+        let output = show_note_with_options(
+            &note,
+            111,
+            "s1",
+            &config,
+            ShowOptions {
+                terminal_styles: true,
+            },
+        );
+        assert!(output.contains("\x1b[38;5;39m|\x1b[0m \x1b[3;38;5;245mQuoted line\x1b[0m"));
     }
 
     #[test]

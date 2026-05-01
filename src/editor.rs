@@ -109,7 +109,7 @@ fn enml_to_text_internal(
     content_enml: &str,
     format: TextFormat,
     image_options: &ImageOptions,
-    highlight_code: bool,
+    terminal_styles: bool,
 ) -> String {
     let mut body = en_note_body(content_enml)
         .unwrap_or(content_enml)
@@ -129,8 +129,9 @@ fn enml_to_text_internal(
         return body;
     }
 
-    body = replace_code_blocks(&body, highlight_code);
-    body = replace_inline_code(&body, highlight_code);
+    body = replace_code_blocks(&body, terminal_styles);
+    body = replace_inline_code(&body, terminal_styles);
+    body = replace_quote_blocks(&body, terminal_styles);
     body = convert_todos_to_markdown(&body);
     body = replace_simple_tag(&body, "h1", |inner| {
         format!("# {}\n\n", html_unescape(inner).trim())
@@ -483,12 +484,33 @@ fn replace_inline_code(content: &str, highlight_code: bool) -> String {
     )
 }
 
+fn replace_quote_blocks(content: &str, terminal_styles: bool) -> String {
+    let content = replace_tag_blocks(
+        content,
+        "blockquote",
+        |_| true,
+        |inner| format_quote_block(inner, terminal_styles),
+    );
+    replace_tag_blocks(&content, "div", is_evernote_quote_tag, |inner| {
+        format_quote_block(inner, terminal_styles)
+    })
+}
+
 fn is_evernote_codeblock_tag(open_tag: &str) -> bool {
     let open_tag = open_tag.to_ascii_lowercase();
     open_tag.contains("-en-codeblock")
         || (open_tag.contains("font-family")
             && open_tag.contains("monospace")
             && open_tag.contains("background-color"))
+}
+
+fn is_evernote_quote_tag(open_tag: &str) -> bool {
+    let open_tag = open_tag.to_ascii_lowercase();
+    if open_tag.contains("-en-codeblock") {
+        return false;
+    }
+    open_tag.contains("border-left")
+        && (open_tag.contains("padding-left") || open_tag.contains("margin-left"))
 }
 
 fn format_code_block(inner: &str, highlight_code: bool) -> String {
@@ -518,6 +540,51 @@ fn highlighted_code_block(code: &str) -> String {
         output.push_str(line);
         output.push_str(&" ".repeat(padding));
         output.push_str("\x1b[0m\n");
+    }
+    output.push('\n');
+    output
+}
+
+fn format_quote_block(inner: &str, terminal_styles: bool) -> String {
+    let quote = code_text_from_html(inner);
+    let quote = quote.trim_matches('\n');
+    if quote.trim().is_empty() {
+        return String::new();
+    }
+
+    if terminal_styles {
+        highlighted_quote_block(quote)
+    } else {
+        markdown_quote_block(quote)
+    }
+}
+
+fn markdown_quote_block(quote: &str) -> String {
+    let mut output = String::new();
+    for line in quote.lines() {
+        if line.trim().is_empty() {
+            output.push_str(">\n");
+        } else {
+            output.push_str("> ");
+            output.push_str(line);
+            output.push('\n');
+        }
+    }
+    output.push('\n');
+    output
+}
+
+fn highlighted_quote_block(quote: &str) -> String {
+    let mut output = String::new();
+    for line in quote.lines() {
+        output.push_str("\x1b[38;5;39m|\x1b[0m ");
+        if line.trim().is_empty() {
+            output.push('\n');
+        } else {
+            output.push_str("\x1b[3;38;5;245m");
+            output.push_str(line);
+            output.push_str("\x1b[0m\n");
+        }
     }
     output.push('\n');
     output
@@ -740,7 +807,7 @@ fn strip_tags(content: &str) -> String {
     for character in content.chars() {
         match character {
             '<' => in_tag = true,
-            '>' => in_tag = false,
+            '>' if in_tag => in_tag = false,
             _ if !in_tag => output.push(character),
             _ => {}
         }
@@ -858,6 +925,12 @@ mod tests {
     }
 
     #[test]
+    fn keeps_greater_than_text() {
+        let text = enml_to_text(&wrap_enml("<div>value > threshold</div>"));
+        assert_eq!(text, "value > threshold\n");
+    }
+
+    #[test]
     fn converts_evernote_codeblock_divs_to_markdown_code_blocks() {
         let html = r#"<div style="box-sizing: border-box; font-family: Monaco, Menlo, Consolas, &quot;Courier New&quot;, monospace; background-color: rgb(251, 250, 248); -en-codeblock:true;"><div>fn main() {</div><div>    println!(&quot;ok&quot;);</div><div>}</div></div>"#;
         let text = enml_to_text(&wrap_enml(html));
@@ -875,6 +948,30 @@ mod tests {
     fn highlights_inline_code_for_terminal_output() {
         let text = enml_to_terminal_text(&wrap_enml("<div>Run <code>cargo test</code></div>"));
         assert_eq!(text, "Run \x1b[38;5;81mcargo test\x1b[0m\n");
+    }
+
+    #[test]
+    fn converts_blockquotes_to_markdown_quotes() {
+        let text = enml_to_text(&wrap_enml(
+            "<blockquote><div>Quoted line</div><div>Second line</div></blockquote>",
+        ));
+        assert_eq!(text, "> Quoted line\n> Second line\n\n");
+    }
+
+    #[test]
+    fn converts_styled_quote_divs_to_markdown_quotes() {
+        let html = r#"<div style="border-left: 3px solid rgb(200, 200, 200); padding-left: 12px;"><div>Styled quote</div></div>"#;
+        let text = enml_to_text(&wrap_enml(html));
+        assert_eq!(text, "> Styled quote\n\n");
+    }
+
+    #[test]
+    fn highlights_blockquotes_for_terminal_output() {
+        let text = enml_to_terminal_text(&wrap_enml("<blockquote>Quoted line</blockquote>"));
+        assert_eq!(
+            text,
+            "\x1b[38;5;39m|\x1b[0m \x1b[3;38;5;245mQuoted line\x1b[0m\n\n"
+        );
     }
 
     #[test]

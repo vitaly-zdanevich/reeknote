@@ -314,7 +314,7 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
                 &user.shard_id,
                 config,
                 out::ShowOptions {
-                    highlight_code: io::stdout().is_terminal(),
+                    terminal_styles: io::stdout().is_terminal(),
                 },
             )
         );
