@@ -390,7 +390,7 @@ asks you to choose.
 
 When output goes to an interactive terminal, Reeknote visually highlights
 Evernote code blocks, inline code, quote blocks, italic text, and bold text.
-Inline links are rendered as Markdown links. Redirected output stays plain
+Inline links are rendered as blue Markdown links. Redirected output stays plain
 Markdown text.
 
 Synopsis:

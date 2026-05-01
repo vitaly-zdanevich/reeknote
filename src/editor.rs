@@ -134,7 +134,7 @@ fn enml_to_text_internal(
     body = replace_quote_blocks(&body, terminal_styles);
     body = replace_italic_text(&body, terminal_styles);
     body = replace_bold_text(&body, terminal_styles);
-    body = replace_links(&body);
+    body = replace_links(&body, terminal_styles);
     body = convert_todos_to_markdown(&body);
     body = replace_simple_tag(&body, "h1", |inner| {
         format!("# {}\n\n", html_unescape(inner).trim())
@@ -535,8 +535,13 @@ fn replace_bold_text(content: &str, terminal_styles: bool) -> String {
     })
 }
 
-fn replace_links(content: &str) -> String {
-    replace_tag_blocks_with_open_tag(content, "a", |_| true, format_link)
+fn replace_links(content: &str, terminal_styles: bool) -> String {
+    replace_tag_blocks_with_open_tag(
+        content,
+        "a",
+        |_| true,
+        |open_tag, inner| format_link(open_tag, inner, terminal_styles),
+    )
 }
 
 fn is_evernote_codeblock_tag(open_tag: &str) -> bool {
@@ -680,15 +685,26 @@ fn format_bold_text(inner: &str, terminal_styles: bool) -> String {
     }
 }
 
-fn format_link(open_tag: &str, inner: &str) -> String {
+fn format_link(open_tag: &str, inner: &str, terminal_styles: bool) -> String {
     let label = code_text_from_html(inner).trim().to_string();
     let href = attr_value(open_tag, "href").map(|href| html_unescape(&href));
-    match (label.is_empty(), href) {
+    let link = match (label.is_empty(), href) {
         (true, Some(href)) => href,
         (false, Some(href)) => format!("[{label}]({href})"),
-        (false, None) => label,
-        (true, None) => String::new(),
+        (false, None) => return label,
+        (true, None) => return String::new(),
+    };
+
+    if terminal_styles {
+        blue_terminal_text(&link)
+    } else {
+        link
     }
+}
+
+fn blue_terminal_text(text: &str) -> String {
+    let text = text.replace("\x1b[0m", "\x1b[0m\x1b[34m");
+    format!("\x1b[34m{text}\x1b[0m")
 }
 
 fn code_text_from_html(content: &str) -> String {
@@ -1120,6 +1136,28 @@ mod tests {
             r#"<div><a href="https://example.com"><b>important</b></a></div>"#,
         ));
         assert_eq!(text, "[**important**](https://example.com)\n\n");
+    }
+
+    #[test]
+    fn highlights_links_for_terminal_output() {
+        let text = enml_to_terminal_text(&wrap_enml(
+            r#"<div>Open <a href="https://example.com">example</a></div>"#,
+        ));
+        assert_eq!(
+            text,
+            "Open \x1b[34m[example](https://example.com)\x1b[0m\n\n"
+        );
+    }
+
+    #[test]
+    fn keeps_terminal_link_blue_after_nested_formatting_reset() {
+        let text = enml_to_terminal_text(&wrap_enml(
+            r#"<div><a href="https://example.com"><b>important</b></a></div>"#,
+        ));
+        assert_eq!(
+            text,
+            "\x1b[34m[\x1b[1mimportant\x1b[0m\x1b[34m](https://example.com)\x1b[0m\n\n"
+        );
     }
 
     #[test]
