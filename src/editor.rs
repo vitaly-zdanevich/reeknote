@@ -1,4 +1,5 @@
 use crate::errors::{ReeknoteError, Result};
+use crate::models::Resource;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -80,19 +81,29 @@ pub fn text_to_enml_with_options(content: &str, format: TextFormat, rawmd: bool)
 }
 
 pub fn enml_to_text(content_enml: &str) -> String {
+    enml_to_text_with_resources(content_enml, &[])
+}
+
+pub fn enml_to_text_with_resources(content_enml: &str, resources: &[Resource]) -> String {
     enml_to_text_internal(
         content_enml,
         TextFormat::Markdown,
         &ImageOptions::default(),
+        resources,
         false,
     )
 }
 
 pub fn enml_to_terminal_text(content_enml: &str) -> String {
+    enml_to_terminal_text_with_resources(content_enml, &[])
+}
+
+pub fn enml_to_terminal_text_with_resources(content_enml: &str, resources: &[Resource]) -> String {
     enml_to_text_internal(
         content_enml,
         TextFormat::Markdown,
         &ImageOptions::default(),
+        resources,
         true,
     )
 }
@@ -102,13 +113,14 @@ pub fn enml_to_text_with_options(
     format: TextFormat,
     image_options: &ImageOptions,
 ) -> String {
-    enml_to_text_internal(content_enml, format, image_options, false)
+    enml_to_text_internal(content_enml, format, image_options, &[], false)
 }
 
 fn enml_to_text_internal(
     content_enml: &str,
     format: TextFormat,
     image_options: &ImageOptions,
+    resources: &[Resource],
     terminal_styles: bool,
 ) -> String {
     let mut body = en_note_body(content_enml)
@@ -123,6 +135,8 @@ fn enml_to_text_internal(
 
     if image_options.save_images {
         body = replace_media_with_images(&body, image_options, format == TextFormat::Html);
+    } else if format != TextFormat::Html {
+        body = replace_media_with_placeholders(&body, resources);
     }
 
     if format == TextFormat::Html {
@@ -919,6 +933,76 @@ fn replace_media_with_images(content: &str, image_options: &ImageOptions, html: 
     output
 }
 
+fn replace_media_with_placeholders(content: &str, resources: &[Resource]) -> String {
+    let mut output = String::new();
+    let mut rest = content;
+
+    while let Some(index) = rest.find("<en-media") {
+        output.push_str(&rest[..index]);
+        rest = &rest[index + "<en-media".len()..];
+        let Some(end) = rest.find('>') else {
+            output.push_str("<en-media");
+            output.push_str(rest);
+            return output;
+        };
+        let tag = &rest[..end];
+        rest = &rest[end + 1..];
+
+        output.push_str(&format!("{}\n\n", media_placeholder(tag, resources)));
+    }
+    output.push_str(rest);
+    output
+}
+
+fn media_placeholder(tag: &str, resources: &[Resource]) -> String {
+    let media_type = attr_value(tag, "type");
+    let hash = attr_value(tag, "hash");
+    let label = if media_type
+        .as_deref()
+        .is_some_and(|value| value.starts_with("image/"))
+    {
+        "Image"
+    } else {
+        "Attachment"
+    };
+    let filename = media_filename(media_type.as_deref(), hash.as_deref(), resources);
+    format!("[{label}: {filename}]")
+}
+
+fn media_filename(media_type: Option<&str>, hash: Option<&str>, resources: &[Resource]) -> String {
+    if let Some(hash) = hash
+        && let Some(resource) = resources
+            .iter()
+            .find(|resource| resource.data.body_hash == hash)
+        && !resource.filename.is_empty()
+    {
+        return resource.filename.clone();
+    }
+
+    let prefix = if media_type
+        .as_ref()
+        .is_some_and(|value| value.starts_with("image/"))
+    {
+        "image"
+    } else {
+        "attachment"
+    };
+    match (hash, media_type.and_then(media_extension)) {
+        (Some(hash), Some(extension)) => format!("{prefix}-{hash}.{extension}"),
+        (Some(hash), None) => format!("{prefix}-{hash}"),
+        (None, Some(extension)) => format!("{prefix}.{extension}"),
+        (None, None) => prefix.to_string(),
+    }
+}
+
+fn media_extension(media_type: &str) -> Option<&str> {
+    match media_type {
+        "image/jpeg" => Some("jpg"),
+        "image/svg+xml" => Some("svg"),
+        value => value.strip_prefix("image/"),
+    }
+}
+
 fn attr_value(tag: &str, key: &str) -> Option<String> {
     for quote in ['"', '\''] {
         let needle = format!("{key}={quote}");
@@ -976,6 +1060,7 @@ pub fn ensure_string_content(content: Option<&str>) -> Result<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::ResourceData;
 
     const MD_TEXT: &str = "# Header 1\n\n## Header 2\n\nLine 1\n\n_Line 2_\n\n**Line 3**\n\n";
     const HTML_TEXT: &str = "<h1>Header 1</h1>\n<h2>Header 2</h2>\n<p>Line 1</p>\n<p><em>Line 2</em></p>\n<p><strong>Line 3</strong></p>\n";
@@ -1049,6 +1134,54 @@ mod tests {
             &options,
         );
         assert!(html.contains("<img src=\"Note-abc.png\">"));
+    }
+
+    #[test]
+    fn converts_images_to_filename_placeholders() {
+        let note = wrap_enml(r#"<en-media type="image/png" hash="abc" />"#);
+        let resources = vec![Resource {
+            mime: Some("image/png".to_string()),
+            filename: "photo.png".to_string(),
+            data: ResourceData {
+                body_hash: "abc".to_string(),
+                body: Vec::new(),
+                size: 0,
+            },
+        }];
+        assert_eq!(
+            enml_to_text_with_resources(&note, &resources),
+            "[Image: photo.png]\n\n"
+        );
+    }
+
+    #[test]
+    fn converts_images_to_fallback_placeholders() {
+        let note = wrap_enml(r#"<en-media type="image/png" hash="abc" />"#);
+        assert_eq!(enml_to_text(&note), "[Image: image-abc.png]\n\n");
+    }
+
+    #[test]
+    fn separates_image_placeholders_from_following_text() {
+        let note = wrap_enml(r#"<en-media type="image/jpeg" hash="abc" />blablabla"#);
+        assert_eq!(enml_to_text(&note), "[Image: image-abc.jpg]\n\nblablabla\n");
+    }
+
+    #[test]
+    fn converts_attachments_to_filename_placeholders() {
+        let note = wrap_enml(r#"<en-media type="application/pdf" hash="abc" />"#);
+        let resources = vec![Resource {
+            mime: Some("application/pdf".to_string()),
+            filename: "document.pdf".to_string(),
+            data: ResourceData {
+                body_hash: "abc".to_string(),
+                body: Vec::new(),
+                size: 0,
+            },
+        }];
+        assert_eq!(
+            enml_to_text_with_resources(&note, &resources),
+            "[Attachment: document.pdf]\n\n"
+        );
     }
 
     #[test]

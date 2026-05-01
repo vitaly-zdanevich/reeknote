@@ -156,9 +156,15 @@ pub fn show_note_with_options(
     ));
     output.push_str(&separator('-', "CONTENT"));
     if options.terminal_styles {
-        output.push_str(&editor::enml_to_terminal_text(&note.content));
+        output.push_str(&editor::enml_to_terminal_text_with_resources(
+            &note.content,
+            &note.resources,
+        ));
     } else {
-        output.push_str(&editor::enml_to_text(&note.content));
+        output.push_str(&editor::enml_to_text_with_resources(
+            &note.content,
+            &note.resources,
+        ));
     }
     output
 }
@@ -373,7 +379,7 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Accounting, NoteAttributes};
+    use crate::models::{Accounting, NoteAttributes, Resource, ResourceData};
 
     fn test_config() -> Config {
         Config::load()
@@ -496,6 +502,29 @@ mod tests {
             },
         );
         assert!(output.contains("\x1b[38;5;39m|\x1b[0m \x1b[3;38;5;245mQuoted line\x1b[0m"));
+    }
+
+    #[test]
+    fn formats_note_images_with_filename_placeholders() {
+        let config = test_config();
+        let note = Note {
+            guid: "12345".to_string(),
+            title: "testnote".to_string(),
+            content: editor::wrap_enml(r#"<en-media type="image/png" hash="abc" />"#),
+            resources: vec![Resource {
+                mime: Some("image/png".to_string()),
+                filename: "photo.png".to_string(),
+                data: ResourceData {
+                    body_hash: "abc".to_string(),
+                    body: Vec::new(),
+                    size: 0,
+                },
+            }],
+            attributes: NoteAttributes::default(),
+            ..Note::default()
+        };
+        let output = show_note(&note, 111, "s1", &config);
+        assert!(output.contains("[Image: photo.png]"));
     }
 
     #[test]

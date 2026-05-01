@@ -391,7 +391,8 @@ asks you to choose.
 When output goes to an interactive terminal, Reeknote visually highlights
 Evernote code blocks, inline code, quote blocks, italic text, and bold text.
 Inline links are rendered as blue Markdown links. Redirected output stays plain
-Markdown text.
+Markdown text. Images that are not downloaded are shown as placeholders with
+their file names, such as `[Image: photo.png]`.
 
 Synopsis:
 
