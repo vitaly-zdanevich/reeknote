@@ -450,10 +450,16 @@ fn replace_divs(content: &str) -> String {
         let text = inner.trim();
         if text == "<br/>" || text == "<br />" {
             "\n".to_string()
+        } else if is_compact_div_text(text) {
+            format!("{text}\n")
         } else {
-            format!("{}\n", text)
+            format!("{text}\n\n")
         }
     })
+}
+
+fn is_compact_div_text(text: &str) -> bool {
+    text.starts_with("* [ ]") || text.starts_with("* [x]")
 }
 
 fn replace_code_blocks(content: &str, highlight_code: bool) -> String {
@@ -872,6 +878,15 @@ mod tests {
     }
 
     #[test]
+    fn converts_div_blocks_to_paragraphs() {
+        let html = "<div>First paragraph</div><div>Second paragraph</div>";
+        assert_eq!(
+            enml_to_text(&wrap_enml(html)),
+            "First paragraph\n\nSecond paragraph\n\n"
+        );
+    }
+
+    #[test]
     fn escapes_markdown_html() {
         assert_eq!(
             text_to_enml("<what ever>"),
@@ -921,13 +936,13 @@ mod tests {
     #[test]
     fn converts_inline_code_to_markdown_code() {
         let text = enml_to_text(&wrap_enml("<div>Run <code>cargo test</code></div>"));
-        assert_eq!(text, "Run `cargo test`\n");
+        assert_eq!(text, "Run `cargo test`\n\n");
     }
 
     #[test]
     fn keeps_greater_than_text() {
         let text = enml_to_text(&wrap_enml("<div>value > threshold</div>"));
-        assert_eq!(text, "value > threshold\n");
+        assert_eq!(text, "value > threshold\n\n");
     }
 
     #[test]
@@ -947,7 +962,7 @@ mod tests {
     #[test]
     fn highlights_inline_code_for_terminal_output() {
         let text = enml_to_terminal_text(&wrap_enml("<div>Run <code>cargo test</code></div>"));
-        assert_eq!(text, "Run \x1b[38;5;81mcargo test\x1b[0m\n");
+        assert_eq!(text, "Run \x1b[38;5;81mcargo test\x1b[0m\n\n");
     }
 
     #[test]
