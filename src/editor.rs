@@ -134,6 +134,7 @@ fn enml_to_text_internal(
     body = replace_quote_blocks(&body, terminal_styles);
     body = replace_italic_text(&body, terminal_styles);
     body = replace_bold_text(&body, terminal_styles);
+    body = replace_links(&body);
     body = convert_todos_to_markdown(&body);
     body = replace_simple_tag(&body, "h1", |inner| {
         format!("# {}\n\n", html_unescape(inner).trim())
@@ -534,6 +535,10 @@ fn replace_bold_text(content: &str, terminal_styles: bool) -> String {
     })
 }
 
+fn replace_links(content: &str) -> String {
+    replace_tag_blocks_with_open_tag(content, "a", |_| true, format_link)
+}
+
 fn is_evernote_codeblock_tag(open_tag: &str) -> bool {
     let open_tag = open_tag.to_ascii_lowercase();
     open_tag.contains("-en-codeblock")
@@ -675,6 +680,17 @@ fn format_bold_text(inner: &str, terminal_styles: bool) -> String {
     }
 }
 
+fn format_link(open_tag: &str, inner: &str) -> String {
+    let label = code_text_from_html(inner).trim().to_string();
+    let href = attr_value(open_tag, "href").map(|href| html_unescape(&href));
+    match (label.is_empty(), href) {
+        (true, Some(href)) => href,
+        (false, Some(href)) => format!("[{label}]({href})"),
+        (false, None) => label,
+        (true, None) => String::new(),
+    }
+}
+
 fn code_text_from_html(content: &str) -> String {
     let content = strip_intertag_whitespace(content);
     let mut output = String::new();
@@ -741,6 +757,19 @@ where
     P: Fn(&str) -> bool,
     F: Fn(&str) -> String,
 {
+    replace_tag_blocks_with_open_tag(content, tag, predicate, |_, inner| formatter(inner))
+}
+
+fn replace_tag_blocks_with_open_tag<P, F>(
+    content: &str,
+    tag: &str,
+    predicate: P,
+    formatter: F,
+) -> String
+where
+    P: Fn(&str) -> bool,
+    F: Fn(&str, &str) -> String,
+{
     let mut output = String::new();
     let mut rest = content;
 
@@ -752,7 +781,7 @@ where
                 output.push_str(&rest[open_start..]);
                 return output;
             };
-            output.push_str(&formatter(&rest[body_start..body_end]));
+            output.push_str(&formatter(open_tag, &rest[body_start..body_end]));
             rest = &rest[close_end..];
         } else {
             output.push_str(&rest[open_start..open_end]);
@@ -1061,6 +1090,36 @@ mod tests {
     fn highlights_bold_for_terminal_output() {
         let text = enml_to_terminal_text(&wrap_enml("<div>This is <b>important</b></div>"));
         assert_eq!(text, "This is \x1b[1mimportant\x1b[0m\n\n");
+    }
+
+    #[test]
+    fn converts_links_to_markdown_links() {
+        let text = enml_to_text(&wrap_enml(
+            r#"<div>Open <a href="https://example.com">my clickable text</a></div>"#,
+        ));
+        assert_eq!(text, "Open [my clickable text](https://example.com)\n\n");
+    }
+
+    #[test]
+    fn unescapes_link_urls() {
+        let text = enml_to_text(&wrap_enml(
+            r#"<div><a href="https://example.com?a=1&amp;b=2">example</a></div>"#,
+        ));
+        assert_eq!(text, "[example](https://example.com?a=1&b=2)\n\n");
+    }
+
+    #[test]
+    fn keeps_link_text_when_href_is_missing() {
+        let text = enml_to_text(&wrap_enml("<div><a>example</a></div>"));
+        assert_eq!(text, "example\n\n");
+    }
+
+    #[test]
+    fn keeps_formatting_inside_markdown_links() {
+        let text = enml_to_text(&wrap_enml(
+            r#"<div><a href="https://example.com"><b>important</b></a></div>"#,
+        ));
+        assert_eq!(text, "[**important**](https://example.com)\n\n");
     }
 
     #[test]
