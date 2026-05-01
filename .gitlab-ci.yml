@@ -77,27 +77,3 @@ build:linux:arm64:
   variables:
     RUST_TARGET: aarch64-unknown-linux-gnu
     ARTIFACT_NAME: reeknote-linux-aarch64
-
-build:macos:
-  stage: build
-  when: manual
-  allow_failure: true
-  tags:
-    - saas-macos-medium-m1
-  image: macos-15-xcode-16
-  before_script:
-    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-    - . "$CARGO_HOME/env"
-    - rustc --version
-    - cargo --version
-  script:
-    - cargo build --locked --release --bins
-    - mkdir -p dist
-    - cp target/release/reeknote dist/
-    - cp target/release/gnsync dist/
-    - tar -C dist -czf reeknote-macos-aarch64.tar.gz reeknote gnsync
-  artifacts:
-    name: reeknote-macos-aarch64
-    paths:
-      - reeknote-macos-aarch64.tar.gz
-    expire_in: 1 week

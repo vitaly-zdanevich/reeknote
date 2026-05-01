@@ -85,14 +85,13 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * Clippy lints;
 * tests;
 * Linux x86_64 release builds;
-* Linux ARM64 release builds;
-* an optional macOS release build.
+* Linux ARM64 release builds.
 
 Each build uploads an artifact containing `reeknote` and `gnsync`.
 
-The runner tags in `.gitlab-ci.yml` target GitLab.com hosted runners. If this
-project uses self-managed or differently tagged runners, adjust the `tags` and
-macOS `image` values.
+The runner tags in `.gitlab-ci.yml` target GitLab.com hosted Linux runners. If
+this project uses self-managed or differently tagged runners, adjust the
+`tags` values.
 
 ## Reeknote Settings
 
