@@ -261,24 +261,31 @@ fn shell_quote(path: &Path) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum MarkdownBlock {
+    Text(String),
+    Code {
+        language: Option<String>,
+        code: String,
+    },
+}
+
 fn markdown_to_html(content: &str, rawmd: bool) -> String {
-    let source = if rawmd {
-        content.to_string()
-    } else {
-        html_escape_tag(content)
-    };
+    let blocks = markdown_blocks(content);
 
-    let blocks: Vec<&str> = source.split("\n\n").collect();
-    let non_empty: Vec<&str> = blocks
-        .into_iter()
-        .map(|block| block.trim_matches('\n'))
-        .filter(|block| !block.trim().is_empty())
-        .collect();
-
-    if !non_empty.is_empty() && non_empty.iter().all(|block| parse_task(block).is_some()) {
+    if !blocks.is_empty()
+        && blocks.iter().all(|block| match block {
+            MarkdownBlock::Text(text) => parse_task(&markdown_text(text, rawmd)).is_some(),
+            MarkdownBlock::Code { .. } => false,
+        })
+    {
         let mut output = String::new();
-        for block in non_empty {
-            let (checked, text) = parse_task(block).expect("checked above");
+        for block in blocks {
+            let MarkdownBlock::Text(text) = block else {
+                continue;
+            };
+            let text = markdown_text(&text, rawmd);
+            let (checked, text) = parse_task(&text).expect("checked above");
             if checked {
                 output.push_str(&format!(
                     "<div><en-todo checked=\"true\"></en-todo>{}</div>",
@@ -292,36 +299,205 @@ fn markdown_to_html(content: &str, rawmd: bool) -> String {
         return output;
     }
 
+    let has_code = blocks
+        .iter()
+        .any(|block| matches!(block, MarkdownBlock::Code { .. }));
+    let paragraph_tag = if has_code { "div" } else { "p" };
+    let block_suffix = if has_code { "" } else { "\n" };
     let mut output = String::new();
-    for block in non_empty {
-        let trimmed_start = block.trim_start();
-        if let Some(text) = trimmed_start.strip_prefix("### ") {
-            output.push_str(&format!("<h3>{}</h3>\n", text.trim()));
-        } else if let Some(text) = trimmed_start.strip_prefix("## ") {
-            output.push_str(&format!("<h2>{}</h2>\n", text.trim()));
-        } else if let Some(text) = trimmed_start.strip_prefix("# ") {
-            output.push_str(&format!("<h1>{}</h1>\n", text.trim()));
-        } else if trimmed_start.starts_with("**")
-            && trimmed_start.ends_with("**")
-            && trimmed_start.len() >= 4
-        {
-            output.push_str(&format!(
-                "<p><strong>{}</strong></p>\n",
-                &trimmed_start[2..trimmed_start.len() - 2]
-            ));
-        } else if trimmed_start.starts_with('_')
-            && trimmed_start.ends_with('_')
-            && trimmed_start.len() >= 2
-        {
-            output.push_str(&format!(
-                "<p><em>{}</em></p>\n",
-                &trimmed_start[1..trimmed_start.len() - 1]
-            ));
-        } else {
-            output.push_str(&format!("<p>{}</p>\n", trimmed_start.replace('\n', "  \n")));
+    for block in blocks {
+        match block {
+            MarkdownBlock::Text(text) => {
+                write_markdown_text_block(&mut output, &text, rawmd, paragraph_tag, block_suffix)
+            }
+            MarkdownBlock::Code { language, code } => {
+                output.push_str(&markdown_code_block_html(
+                    &code,
+                    language.as_deref(),
+                    block_suffix,
+                ));
+            }
         }
     }
+    if has_code {
+        output.push_str("<div><br/></div>");
+    }
     output
+}
+
+fn markdown_blocks(content: &str) -> Vec<MarkdownBlock> {
+    let mut blocks = Vec::new();
+    let mut text_lines = Vec::new();
+    let mut code_lines = Vec::new();
+    let mut code_fence = None;
+
+    for line in content.lines() {
+        if let Some((fence_len, _)) = code_fence.as_ref() {
+            if is_code_fence_close(line, *fence_len) {
+                let (_, language) = code_fence.take().expect("checked above");
+                blocks.push(MarkdownBlock::Code {
+                    language,
+                    code: code_lines.join("\n"),
+                });
+                code_lines.clear();
+            } else {
+                code_lines.push(line.to_string());
+            }
+            continue;
+        }
+
+        if let Some((fence_len, language)) = code_fence_start(line) {
+            push_markdown_text_blocks(&mut blocks, &text_lines.join("\n"));
+            text_lines.clear();
+            code_fence = Some((fence_len, language));
+        } else {
+            text_lines.push(line.to_string());
+        }
+    }
+
+    if let Some((_, language)) = code_fence {
+        blocks.push(MarkdownBlock::Code {
+            language,
+            code: code_lines.join("\n"),
+        });
+    } else {
+        push_markdown_text_blocks(&mut blocks, &text_lines.join("\n"));
+    }
+
+    blocks
+}
+
+fn push_markdown_text_blocks(blocks: &mut Vec<MarkdownBlock>, content: &str) {
+    blocks.extend(
+        content
+            .split("\n\n")
+            .map(|block| block.trim_matches('\n'))
+            .filter(|block| !block.trim().is_empty())
+            .map(|block| MarkdownBlock::Text(block.to_string())),
+    );
+}
+
+fn code_fence_start(line: &str) -> Option<(usize, Option<String>)> {
+    let trimmed = line.trim_start();
+    let fence_len = trimmed
+        .as_bytes()
+        .iter()
+        .take_while(|byte| **byte == b'`')
+        .count();
+    if fence_len < 3 {
+        return None;
+    }
+
+    let language = trimmed[fence_len..]
+        .split_whitespace()
+        .next()
+        .and_then(markdown_code_language);
+    Some((fence_len, language))
+}
+
+fn is_code_fence_close(line: &str, opening_fence_len: usize) -> bool {
+    let trimmed = line.trim();
+    let fence_len = trimmed
+        .as_bytes()
+        .iter()
+        .take_while(|byte| **byte == b'`')
+        .count();
+    fence_len >= opening_fence_len && trimmed[fence_len..].trim().is_empty()
+}
+
+fn markdown_text(text: &str, rawmd: bool) -> String {
+    if rawmd {
+        text.to_string()
+    } else {
+        html_escape_tag(text)
+    }
+}
+
+fn markdown_code_block_html(code: &str, language: Option<&str>, block_suffix: &str) -> String {
+    let language_style = if let Some(language) = language {
+        format!(" --en-syntaxLanguage:{language};")
+    } else {
+        String::new()
+    };
+    format!(
+        "<div style=\"--en-codeblock:true;{language_style} --en-lineWrapping:false;box-sizing: border-box; padding: 8px; font-family: &quot;Fira Code&quot;,&quot;Consolas&quot;,&quot;Monaco&quot;,&quot;Andale Mono&quot;,&quot;Ubuntu Mono&quot;,&quot;Courier New&quot;,monospace font-size: 12px; color: rgb(51, 51, 51); border-top-left-radius: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-bottom-left-radius: 4px; background-color: rgb(251, 250, 248); border: 1px solid rgba(0, 0, 0, 0.14902); background-position: initial initial; background-repeat: initial initial;\">{}</div>{block_suffix}",
+        markdown_code_lines_html(code)
+    )
+}
+
+fn markdown_code_lines_html(code: &str) -> String {
+    let mut output = String::new();
+    for line in code.lines() {
+        if line.is_empty() {
+            output.push_str("<div><br/></div>");
+        } else {
+            output.push_str(&format!("<div>{}</div>", html_escape_tag(line)));
+        }
+    }
+    if code.is_empty() {
+        output.push_str("<div><br/></div>");
+    }
+    output
+}
+
+fn markdown_code_language(language: &str) -> Option<String> {
+    let language = language
+        .trim()
+        .trim_matches(|character| matches!(character, '"' | '\'' | '{' | '}' | '.'))
+        .to_ascii_lowercase();
+    let language = match language.as_str() {
+        "sh" | "shell" | "zsh" => "bash",
+        "py" | "python3" => "python",
+        "js" | "node" | "nodejs" => "javascript",
+        "ts" => "typescript",
+        "c++" => "cpp",
+        "c#" => "csharp",
+        "ps1" | "pwsh" => "powershell",
+        "plain" | "text" => "plaintext",
+        "" => return None,
+        language => language,
+    };
+
+    Some(language.to_string())
+}
+
+fn write_markdown_text_block(
+    output: &mut String,
+    block: &str,
+    rawmd: bool,
+    paragraph_tag: &str,
+    block_suffix: &str,
+) {
+    let block = markdown_text(block, rawmd);
+    let trimmed_start = block.trim_start();
+    if let Some(text) = trimmed_start.strip_prefix("### ") {
+        output.push_str(&format!("<h3>{}</h3>{block_suffix}", text.trim()));
+    } else if let Some(text) = trimmed_start.strip_prefix("## ") {
+        output.push_str(&format!("<h2>{}</h2>{block_suffix}", text.trim()));
+    } else if let Some(text) = trimmed_start.strip_prefix("# ") {
+        output.push_str(&format!("<h1>{}</h1>{block_suffix}", text.trim()));
+    } else if trimmed_start.starts_with("**")
+        && trimmed_start.ends_with("**")
+        && trimmed_start.len() >= 4
+    {
+        output.push_str(&format!(
+            "<{paragraph_tag}><strong>{}</strong></{paragraph_tag}>{block_suffix}",
+            &trimmed_start[2..trimmed_start.len() - 2]
+        ));
+    } else if trimmed_start.starts_with('_')
+        && trimmed_start.ends_with('_')
+        && trimmed_start.len() >= 2
+    {
+        output.push_str(&format!(
+            "<{paragraph_tag}><em>{}</em></{paragraph_tag}>{block_suffix}",
+            &trimmed_start[1..trimmed_start.len() - 1]
+        ));
+    } else {
+        output.push_str(&format!(
+            "<{paragraph_tag}>{}</{paragraph_tag}>{block_suffix}",
+            trimmed_start.replace('\n', "  \n")
+        ));
+    }
 }
 
 fn parse_task(block: &str) -> Option<(bool, &str)> {

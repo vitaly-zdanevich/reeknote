@@ -7,9 +7,59 @@ use reeknote::models::{Resource, ResourceData};
 const MD_TEXT: &str = "# Header 1\n\n## Header 2\n\nLine 1\n\n_Line 2_\n\n**Line 3**\n\n";
 const HTML_TEXT: &str = "<h1>Header 1</h1>\n<h2>Header 2</h2>\n<p>Line 1</p>\n<p><em>Line 2</em></p>\n<p><strong>Line 3</strong></p>\n";
 
+fn expected_markdown_code_block(language: Option<&str>, body: &str) -> String {
+    let language_style = language
+        .map(|language| format!(" --en-syntaxLanguage:{language};"))
+        .unwrap_or_default();
+    format!(
+        "<div style=\"--en-codeblock:true;{language_style} --en-lineWrapping:false;box-sizing: border-box; padding: 8px; font-family: &quot;Fira Code&quot;,&quot;Consolas&quot;,&quot;Monaco&quot;,&quot;Andale Mono&quot;,&quot;Ubuntu Mono&quot;,&quot;Courier New&quot;,monospace font-size: 12px; color: rgb(51, 51, 51); border-top-left-radius: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; border-bottom-left-radius: 4px; background-color: rgb(251, 250, 248); border: 1px solid rgba(0, 0, 0, 0.14902); background-position: initial initial; background-repeat: initial initial;\">{body}</div>"
+    )
+}
+
 #[test]
 fn converts_markdown_to_enml() {
     assert_eq!(text_to_enml(MD_TEXT), wrap_enml(HTML_TEXT));
+}
+
+#[test]
+fn converts_markdown_fenced_code_blocks_to_enml() {
+    let markdown = "Before\n\n```bash\nmy bash code\n```\n\nAfter";
+    let html = format!(
+        "<div>Before</div>{}<div>After</div><div><br/></div>",
+        expected_markdown_code_block(Some("bash"), "<div>my bash code</div>")
+    );
+    assert_eq!(text_to_enml(markdown), wrap_enml(&html));
+}
+
+#[test]
+fn converts_markdown_fenced_code_blocks_without_language_to_auto_code_blocks() {
+    let markdown = "```\nif value < limit && value > 0\n```";
+    let html = expected_markdown_code_block(
+        None,
+        "<div>if value &lt; limit &amp;&amp; value &gt; 0</div>",
+    ) + "<div><br/></div>";
+    assert_eq!(text_to_enml(markdown), wrap_enml(&html));
+}
+
+#[test]
+fn converts_python_and_javascript_fence_languages_to_enml() {
+    let markdown = "```python\nprint('hi')\n```\n\n```javascript\nconsole.log('hi')\n```";
+    let html = format!(
+        "{}{}<div><br/></div>",
+        expected_markdown_code_block(Some("python"), "<div>print('hi')</div>"),
+        expected_markdown_code_block(Some("javascript"), "<div>console.log('hi')</div>")
+    );
+    assert_eq!(text_to_enml(markdown), wrap_enml(&html));
+}
+
+#[test]
+fn escapes_html_inside_markdown_fenced_code_blocks() {
+    let markdown = "```\nif value < limit && value > 0\n```";
+    let html = expected_markdown_code_block(
+        None,
+        "<div>if value &lt; limit &amp;&amp; value &gt; 0</div>",
+    ) + "<div><br/></div>";
+    assert_eq!(text_to_enml(markdown), wrap_enml(&html));
 }
 
 #[test]
