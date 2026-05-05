@@ -150,15 +150,9 @@ fn enml_to_text_internal(
     body = replace_bold_text(&body, terminal_styles);
     body = replace_links(&body, terminal_styles);
     body = convert_todos_to_markdown(&body);
-    body = replace_simple_tag(&body, "h1", |inner| {
-        format!("# {}\n\n", html_unescape(inner).trim())
-    });
-    body = replace_simple_tag(&body, "h2", |inner| {
-        format!("## {}\n\n", html_unescape(inner).trim())
-    });
-    body = replace_simple_tag(&body, "h3", |inner| {
-        format!("### {}\n\n", html_unescape(inner).trim())
-    });
+    body = replace_simple_tag(&body, "h1", |inner| format!("# {}\n\n", inner.trim()));
+    body = replace_simple_tag(&body, "h2", |inner| format!("## {}\n\n", inner.trim()));
+    body = replace_simple_tag(&body, "h3", |inner| format!("### {}\n\n", inner.trim()));
     body = replace_paragraphs(&body);
     body = replace_divs(&body);
     body = body
@@ -668,10 +662,11 @@ fn replace_inline_code(content: &str, highlight_code: bool) -> String {
         |_| true,
         |inner| {
             let code = code_text_from_html(inner);
+            let code = html_escape_tag(code.trim());
             if highlight_code {
-                format!("\x1b[38;5;81m{}\x1b[0m", code.trim())
+                format!("\x1b[38;5;81m{code}\x1b[0m")
             } else {
-                format!("`{}`", code.trim())
+                format!("`{code}`")
             }
         },
     )
@@ -781,6 +776,7 @@ fn format_code_block(inner: &str, highlight_code: bool) -> String {
         return highlighted_code_block(code);
     }
 
+    let code = html_escape_tag(code);
     format!("```\n{code}\n```\n\n")
 }
 
@@ -794,7 +790,7 @@ fn highlighted_code_block(code: &str) -> String {
     for line in code.lines() {
         let padding = width.saturating_sub(line.chars().count()) + 1;
         output.push_str("\x1b[48;5;236;38;5;252m ");
-        output.push_str(line);
+        output.push_str(&html_escape_tag(line));
         output.push_str(&" ".repeat(padding));
         output.push_str("\x1b[0m\n");
     }
@@ -823,7 +819,7 @@ fn markdown_quote_block(quote: &str) -> String {
             output.push_str(">\n");
         } else {
             output.push_str("> ");
-            output.push_str(line);
+            output.push_str(&html_escape_tag(line));
             output.push('\n');
         }
     }
@@ -839,7 +835,7 @@ fn highlighted_quote_block(quote: &str) -> String {
             output.push('\n');
         } else {
             output.push_str("\x1b[3;38;5;245m");
-            output.push_str(line);
+            output.push_str(&html_escape_tag(line));
             output.push_str("\x1b[0m\n");
         }
     }
@@ -854,6 +850,7 @@ fn format_italic_text(inner: &str, terminal_styles: bool) -> String {
         return String::new();
     }
 
+    let text = html_escape_tag(text);
     if terminal_styles {
         format!("\x1b[3m{text}\x1b[0m")
     } else {
@@ -868,6 +865,7 @@ fn format_bold_text(inner: &str, terminal_styles: bool) -> String {
         return String::new();
     }
 
+    let text = html_escape_tag(text);
     if terminal_styles {
         format!("\x1b[1m{text}\x1b[0m")
     } else {
@@ -876,8 +874,8 @@ fn format_bold_text(inner: &str, terminal_styles: bool) -> String {
 }
 
 fn format_link(open_tag: &str, inner: &str, terminal_styles: bool) -> String {
-    let label = code_text_from_html(inner).trim().to_string();
-    let href = attr_value(open_tag, "href").map(|href| html_unescape(&href));
+    let label = html_escape_tag(code_text_from_html(inner).trim());
+    let href = attr_value(open_tag, "href").map(|href| html_escape_tag(&html_unescape(&href)));
     let link = match (label.is_empty(), href) {
         (true, Some(href)) => href,
         (false, Some(href)) => format!("[{label}]({href})"),

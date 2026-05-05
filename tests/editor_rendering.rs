@@ -63,6 +63,20 @@ fn escapes_html_inside_markdown_fenced_code_blocks() {
 }
 
 #[test]
+fn keeps_angle_bracket_placeholders_inside_markdown_code_blocks() {
+    let note = text_to_enml("```\ngit tag <name>\n```");
+    assert_eq!(enml_to_text(&note), "```\ngit tag <name>\n```\n\n");
+}
+
+#[test]
+fn keeps_angle_bracket_placeholders_inside_inline_code() {
+    let text = enml_to_text(&wrap_enml(
+        "<div>Run <code>git tag &lt;name&gt;</code></div>",
+    ));
+    assert_eq!(text, "Run `git tag <name>`\n\n");
+}
+
+#[test]
 fn converts_enml_to_markdown() {
     assert_eq!(enml_to_text(&wrap_enml(HTML_TEXT)), MD_TEXT);
 }
