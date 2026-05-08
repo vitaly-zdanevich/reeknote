@@ -878,6 +878,7 @@ fn format_link(open_tag: &str, inner: &str, terminal_styles: bool) -> String {
     let href = attr_value(open_tag, "href").map(|href| html_escape_tag(&html_unescape(&href)));
     let link = match (label.is_empty(), href) {
         (true, Some(href)) => href,
+        (false, Some(href)) if terminal_styles && label == href => href,
         (false, Some(href)) => format!("[{label}]({href})"),
         (false, None) => return label,
         (true, None) => return String::new(),

@@ -240,6 +240,14 @@ fn converts_links_to_markdown_links() {
 }
 
 #[test]
+fn keeps_markdown_link_syntax_when_label_matches_href() {
+    let text = enml_to_text(&wrap_enml(
+        r#"<div>Open <a href="https://example.com">https://example.com</a></div>"#,
+    ));
+    assert_eq!(text, "Open [https://example.com](https://example.com)\n\n");
+}
+
+#[test]
 fn unescapes_link_urls() {
     let text = enml_to_text(&wrap_enml(
         r#"<div><a href="https://example.com?a=1&amp;b=2">example</a></div>"#,
@@ -270,6 +278,14 @@ fn highlights_links_for_terminal_output() {
         text,
         "Open \x1b[34m[example](https://example.com)\x1b[0m\n\n"
     );
+}
+
+#[test]
+fn shows_terminal_link_without_markdown_syntax_when_label_matches_href() {
+    let text = enml_to_terminal_text(&wrap_enml(
+        r#"<div>Open <a href="https://example.com">https://example.com</a></div>"#,
+    ));
+    assert_eq!(text, "Open \x1b[34mhttps://example.com\x1b[0m\n\n");
 }
 
 #[test]
