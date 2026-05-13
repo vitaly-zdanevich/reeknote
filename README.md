@@ -394,6 +394,11 @@ Inline links are rendered as blue Markdown links. Redirected output stays plain
 Markdown text. Images that are not downloaded are shown as placeholders with
 their file names, such as `[Image: photo.png]`.
 
+If a note has audio attachments and `show` is running in an interactive
+terminal, Reeknote asks whether to play them with the local `mpv` player. When
+you confirm, Reeknote downloads the audio attachment data to temporary files,
+opens them in `mpv`, and removes the temporary files after playback exits.
+
 Synopsis:
 
 ```sh

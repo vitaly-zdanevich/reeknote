@@ -3,14 +3,17 @@ use reeknote::config::Config;
 use reeknote::edam_client::EdamClient;
 use reeknote::editor;
 use reeknote::errors::{ReeknoteError, Result};
-use reeknote::models::{ListItem, Note, Notebook, Tag};
+use reeknote::models::{ListItem, Note, Notebook, Resource, Tag};
 use reeknote::oauth::OAuthClient;
 use reeknote::out;
 use reeknote::reeknote as app;
 use reeknote::reeknote::{EvernoteClient, NotesService};
 use reeknote::storage::Storage;
 use std::collections::BTreeMap;
+use std::fs;
 use std::io::{self, IsTerminal, Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const METADATA_CACHE_TTL_SECONDS: i64 = 3_600;
@@ -306,6 +309,7 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
         print!("{}", note.content);
     } else {
         let user = user.unwrap_or_default();
+        let terminal_styles = io::stdout().is_terminal();
         print!(
             "{}",
             out::show_note_with_options(
@@ -313,13 +317,161 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
                 user.id,
                 &user.shard_id,
                 config,
-                out::ShowOptions {
-                    terminal_styles: io::stdout().is_terminal(),
-                },
+                out::ShowOptions { terminal_styles },
             )
         );
+        if terminal_styles && io::stdin().is_terminal() {
+            offer_audio_playback(&mut client, &note)?;
+        }
     }
     Ok(())
+}
+
+fn offer_audio_playback(client: &mut EdamClient, note: &Note) -> Result<()> {
+    let resources = audio_resources(note);
+    if resources.is_empty() {
+        return Ok(());
+    }
+
+    if !confirm(&audio_playback_confirmation_message(&resources))? {
+        return Ok(());
+    }
+
+    let note = client.get_note_with_resources(&note.guid)?;
+    let resources = audio_resources(&note);
+    play_audio_resources(&resources)
+}
+
+fn audio_resources(note: &Note) -> Vec<&Resource> {
+    note.resources
+        .iter()
+        .filter(|resource| is_audio_resource(resource))
+        .collect()
+}
+
+fn is_audio_resource(resource: &Resource) -> bool {
+    resource
+        .mime
+        .as_deref()
+        .is_some_and(|mime| mime.to_ascii_lowercase().starts_with("audio/"))
+}
+
+fn audio_playback_confirmation_message(resources: &[&Resource]) -> String {
+    match resources {
+        [resource] => format!(
+            "Play audio attachment \"{}\" with mpv?",
+            audio_attachment_name(resource, 1)
+        ),
+        _ => {
+            let mut message = format!("Play {} audio attachments with mpv?", resources.len());
+            for (index, resource) in resources.iter().enumerate() {
+                message.push_str(&format!(
+                    "\n- {}",
+                    audio_attachment_name(resource, index + 1)
+                ));
+            }
+            message
+        }
+    }
+}
+
+fn audio_attachment_name(resource: &Resource, index: usize) -> String {
+    if !resource.filename.trim().is_empty() {
+        return resource.filename.clone();
+    }
+    if !resource.data.body_hash.is_empty() {
+        let hash = &resource.data.body_hash[..resource.data.body_hash.len().min(8)];
+        return format!("audio-{hash}");
+    }
+    format!("audio attachment {index}")
+}
+
+fn play_audio_resources(resources: &[&Resource]) -> Result<()> {
+    let paths = write_audio_temp_files(resources)?;
+    if paths.is_empty() {
+        return Err(ReeknoteError::External(
+            "audio attachment data is empty".to_string(),
+        ));
+    }
+
+    let status = Command::new("mpv").args(&paths).status();
+    cleanup_temp_files(&paths);
+    let status = status?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(ReeknoteError::External(format!(
+            "mpv exited with status {status}"
+        )))
+    }
+}
+
+fn write_audio_temp_files(resources: &[&Resource]) -> Result<Vec<PathBuf>> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let mut paths = Vec::new();
+    for (index, resource) in resources.iter().enumerate() {
+        if resource.data.body.is_empty() {
+            continue;
+        }
+        let extension = audio_extension(resource);
+        let path = std::env::temp_dir().join(format!(
+            "reeknote-audio-{}-{timestamp}-{index}.{extension}",
+            std::process::id()
+        ));
+        fs::write(&path, &resource.data.body)?;
+        paths.push(path);
+    }
+    Ok(paths)
+}
+
+fn cleanup_temp_files(paths: &[PathBuf]) {
+    for path in paths {
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn audio_extension(resource: &Resource) -> String {
+    if let Some(extension) = Path::new(&resource.filename)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .and_then(safe_audio_extension)
+    {
+        return extension;
+    }
+
+    let Some(mime) = resource.mime.as_deref() else {
+        return "audio".to_string();
+    };
+    let extension = match mime.to_ascii_lowercase().as_str() {
+        "audio/aac" => "aac",
+        "audio/aiff" | "audio/x-aiff" => "aiff",
+        "audio/amr" => "amr",
+        "audio/flac" => "flac",
+        "audio/midi" | "audio/x-midi" => "midi",
+        "audio/mp4" | "audio/x-m4a" => "m4a",
+        "audio/mpeg" | "audio/mp3" => "mp3",
+        "audio/ogg" => "ogg",
+        "audio/wav" | "audio/wave" | "audio/x-wav" | "audio/vnd.wave" => "wav",
+        "audio/webm" => "webm",
+        _ => "audio",
+    };
+    extension.to_string()
+}
+
+fn safe_audio_extension(extension: &str) -> Option<String> {
+    let extension = extension
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .take(12)
+        .collect::<String>();
+    if extension.is_empty() {
+        None
+    } else {
+        Some(extension)
+    }
 }
 
 fn handle_create(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Result<()> {
@@ -1217,5 +1369,65 @@ mod tests {
             notes[0].tag_names,
             vec!["project".to_string(), "work".to_string()]
         );
+    }
+
+    #[test]
+    fn detects_audio_resources() {
+        let note = Note {
+            resources: vec![
+                test_resource("Audio/MPEG", "voice.mp3", "abc", b""),
+                test_resource("image/png", "photo.png", "def", b""),
+            ],
+            ..Note::default()
+        };
+        let resources = audio_resources(&note);
+        assert_eq!(resources.len(), 1);
+        assert_eq!(resources[0].filename, "voice.mp3");
+    }
+
+    #[test]
+    fn formats_audio_playback_confirmation_for_multiple_resources() {
+        let first = test_resource("audio/mpeg", "voice.mp3", "abc", b"");
+        let second = test_resource("audio/ogg", "", "abcdef123456", b"");
+        let resources = vec![&first, &second];
+        assert_eq!(
+            audio_playback_confirmation_message(&resources),
+            "Play 2 audio attachments with mpv?\n- voice.mp3\n- audio-abcdef12"
+        );
+    }
+
+    #[test]
+    fn formats_audio_playback_confirmation_for_single_resource() {
+        let resource = test_resource("audio/mpeg", "voice.mp3", "abc", b"");
+        assert_eq!(
+            audio_playback_confirmation_message(&[&resource]),
+            "Play audio attachment \"voice.mp3\" with mpv?"
+        );
+    }
+
+    #[test]
+    fn writes_audio_temp_files_for_mpv() {
+        let resource = test_resource("audio/mpeg", "voice.mp3", "abc", b"audio bytes");
+        let paths = write_audio_temp_files(&[&resource]).unwrap();
+        assert_eq!(paths.len(), 1);
+        assert_eq!(
+            paths[0].extension().and_then(|value| value.to_str()),
+            Some("mp3")
+        );
+        assert_eq!(std::fs::read(&paths[0]).unwrap(), b"audio bytes");
+        cleanup_temp_files(&paths);
+        assert!(!paths[0].exists());
+    }
+
+    fn test_resource(mime: &str, filename: &str, body_hash: &str, body: &[u8]) -> Resource {
+        Resource {
+            mime: Some(mime.to_string()),
+            filename: filename.to_string(),
+            data: reeknote::models::ResourceData {
+                body_hash: body_hash.to_string(),
+                body: body.to_vec(),
+                size: body.len(),
+            },
+        }
     }
 }
