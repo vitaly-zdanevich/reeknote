@@ -441,7 +441,7 @@ fn merge_hydrated_resource(resource: &mut Resource, fetched: Resource) {
 }
 
 fn decode_hex_hash(hash: &str) -> Option<Vec<u8>> {
-    if hash.len() % 2 != 0 {
+    if !hash.len().is_multiple_of(2) {
         return None;
     }
 
@@ -536,19 +536,17 @@ fn play_audio_resources(client: &mut EdamClient, resources: &[&Resource]) -> Res
     let first_path = download_audio_temp_file(client, resources[0], &session, 0)?;
     paths.push(first_path.clone());
 
-    if resources.len() == 1 {
-        return play_single_audio_file(&first_path, &paths);
-    }
-
-    let mut child = start_mpv_playlist(&first_path, &session.ipc_path)?;
-    let mut ipc = connect_mpv_ipc(&session.ipc_path)?;
-    let queue_result = queue_remaining_audio(client, resources, &session, &mut paths, &mut ipc);
-    let _ = ipc.send_idle(false);
-    let status = child.wait();
+    let result = if resources.len() == 1 {
+        play_single_audio_file(&first_path)
+    } else {
+        play_audio_playlist(client, resources, &session, &first_path, &mut paths)
+    };
     cleanup_temp_files(&paths);
+    result
+}
 
-    queue_result?;
-    let status = status?;
+fn play_single_audio_file(path: &Path) -> Result<()> {
+    let status = Command::new("mpv").arg(path).status()?;
     if status.success() {
         Ok(())
     } else {
@@ -558,9 +556,19 @@ fn play_audio_resources(client: &mut EdamClient, resources: &[&Resource]) -> Res
     }
 }
 
-fn play_single_audio_file(path: &Path, cleanup_paths: &[PathBuf]) -> Result<()> {
-    let status = Command::new("mpv").arg(path).status();
-    cleanup_temp_files(cleanup_paths);
+fn play_audio_playlist(
+    client: &mut EdamClient,
+    resources: &[&Resource],
+    session: &AudioPlaybackSession,
+    first_path: &Path,
+    paths: &mut Vec<PathBuf>,
+) -> Result<()> {
+    let mut child = start_mpv_playlist(first_path, &session.ipc_path)?;
+    let mut ipc = connect_mpv_ipc(&session.ipc_path)?;
+    let queue_result = queue_remaining_audio(client, resources, session, paths, &mut ipc);
+    let _ = ipc.send_idle(false);
+    let status = child.wait();
+    queue_result?;
     let status = status?;
     if status.success() {
         Ok(())
@@ -620,7 +628,8 @@ fn download_audio_temp_file(
             audio_attachment_name(resource, index + 1)
         )));
     }
-    let path = audio_temp_path(resource, session.timestamp, index);
+    fs::create_dir_all(&session.audio_dir)?;
+    let path = audio_temp_path(resource, session, index);
     fs::write(&path, body)?;
     Ok(path)
 }
@@ -641,29 +650,96 @@ fn audio_resource_body(client: &mut EdamClient, resource: &Resource) -> Result<V
 #[cfg(test)]
 fn write_audio_temp_files(resources: &[&Resource]) -> Result<Vec<PathBuf>> {
     let session = AudioPlaybackSession::new();
+    fs::create_dir_all(&session.audio_dir)?;
     let mut paths = Vec::new();
     for (index, resource) in resources.iter().enumerate() {
         if resource.data.body.is_empty() {
             continue;
         }
-        let path = audio_temp_path(resource, session.timestamp, index);
+        let path = audio_temp_path(resource, &session, index);
         fs::write(&path, &resource.data.body)?;
         paths.push(path);
     }
     Ok(paths)
 }
 
-fn audio_temp_path(resource: &Resource, timestamp: u128, index: usize) -> PathBuf {
+fn audio_temp_path(resource: &Resource, session: &AudioPlaybackSession, index: usize) -> PathBuf {
+    let filename = audio_temp_filename(resource, index);
+    unique_audio_temp_path(&session.audio_dir, &filename)
+}
+
+fn audio_temp_filename(resource: &Resource, index: usize) -> String {
+    if let Some(filename) = safe_original_audio_filename(&resource.filename) {
+        return filename;
+    }
+
     let extension = audio_extension(resource);
-    std::env::temp_dir().join(format!(
-        "reeknote-audio-{}-{timestamp}-{index}.{extension}",
-        std::process::id()
-    ))
+    if !resource.data.body_hash.is_empty() {
+        let hash = &resource.data.body_hash[..resource.data.body_hash.len().min(8)];
+        return format!("audio-{hash}.{extension}");
+    }
+    format!("audio-{}.{extension}", index + 1)
+}
+
+fn safe_original_audio_filename(filename: &str) -> Option<String> {
+    let filename = filename.trim();
+    if filename.is_empty() {
+        return None;
+    }
+
+    let filename = Path::new(filename)
+        .file_name()
+        .and_then(|filename| filename.to_str())
+        .unwrap_or(filename);
+    let filename = filename
+        .chars()
+        .map(|character| {
+            if matches!(character, '/' | '\\') || character.is_control() {
+                '_'
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    let filename = filename.trim();
+    if filename.is_empty() || matches!(filename, "." | "..") {
+        None
+    } else {
+        Some(filename.to_string())
+    }
+}
+
+fn unique_audio_temp_path(dir: &Path, filename: &str) -> PathBuf {
+    let path = dir.join(filename);
+    if !path.exists() {
+        return path;
+    }
+
+    let (stem, extension) = split_filename_extension(filename);
+    for copy in 2.. {
+        let filename = if extension.is_empty() {
+            format!("{stem}-{copy}")
+        } else {
+            format!("{stem}-{copy}.{extension}")
+        };
+        let path = dir.join(filename);
+        if !path.exists() {
+            return path;
+        }
+    }
+    unreachable!("infinite range should eventually find a free filename")
+}
+
+fn split_filename_extension(filename: &str) -> (&str, &str) {
+    filename
+        .rsplit_once('.')
+        .filter(|(stem, extension)| !stem.is_empty() && !extension.is_empty())
+        .unwrap_or((filename, ""))
 }
 
 #[derive(Clone, Debug)]
 struct AudioPlaybackSession {
-    timestamp: u128,
+    audio_dir: PathBuf,
     ipc_path: PathBuf,
 }
 
@@ -674,7 +750,8 @@ impl AudioPlaybackSession {
             .map(|duration| duration.as_nanos())
             .unwrap_or_default();
         Self {
-            timestamp,
+            audio_dir: std::env::temp_dir()
+                .join(format!("reeknote-audio-{}-{timestamp}", std::process::id())),
             ipc_path: std::env::temp_dir().join(format!(
                 "reeknote-mpv-{}-{timestamp}.sock",
                 std::process::id()
@@ -740,8 +817,21 @@ fn json_escape(value: &str) -> String {
 }
 
 fn cleanup_temp_files(paths: &[PathBuf]) {
+    let dirs = paths
+        .iter()
+        .filter_map(|path| path.parent().map(Path::to_path_buf))
+        .collect::<Vec<_>>();
     for path in paths {
         let _ = fs::remove_file(path);
+    }
+    for dir in dirs {
+        if dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("reeknote-audio-"))
+        {
+            let _ = fs::remove_dir(dir);
+        }
     }
 }
 
@@ -1809,12 +1899,53 @@ mod tests {
         let paths = write_audio_temp_files(&[&resource]).unwrap();
         assert_eq!(paths.len(), 1);
         assert_eq!(
+            paths[0].file_name().and_then(|value| value.to_str()),
+            Some("voice.mp3")
+        );
+        assert!(
+            paths[0]
+                .parent()
+                .and_then(|path| path.file_name())
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.starts_with("reeknote-audio-"))
+        );
+        assert_eq!(
             paths[0].extension().and_then(|value| value.to_str()),
             Some("mp3")
         );
         assert_eq!(std::fs::read(&paths[0]).unwrap(), b"audio bytes");
         cleanup_temp_files(&paths);
         assert!(!paths[0].exists());
+    }
+
+    #[test]
+    fn keeps_duplicate_audio_temp_filenames_unique() {
+        let first = test_resource("audio/mpeg", "voice.mp3", "abc", b"first");
+        let second = test_resource("audio/mpeg", "voice.mp3", "def", b"second");
+        let paths = write_audio_temp_files(&[&first, &second]).unwrap();
+
+        assert_eq!(
+            paths
+                .iter()
+                .filter_map(|path| path.file_name().and_then(|value| value.to_str()))
+                .collect::<Vec<_>>(),
+            vec!["voice.mp3", "voice-2.mp3"]
+        );
+        assert_eq!(std::fs::read(&paths[0]).unwrap(), b"first");
+        assert_eq!(std::fs::read(&paths[1]).unwrap(), b"second");
+        cleanup_temp_files(&paths);
+    }
+
+    #[test]
+    fn falls_back_to_generated_audio_temp_filename() {
+        let resource = test_resource("audio/ogg", "", "abcdef123456", b"audio bytes");
+        let paths = write_audio_temp_files(&[&resource]).unwrap();
+
+        assert_eq!(
+            paths[0].file_name().and_then(|value| value.to_str()),
+            Some("audio-abcdef12.ogg")
+        );
+        cleanup_temp_files(&paths);
     }
 
     fn test_resource(mime: &str, filename: &str, body_hash: &str, body: &[u8]) -> Resource {
