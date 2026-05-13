@@ -1,6 +1,8 @@
 use crate::errors::{ReeknoteError, Result};
 use crate::models::Resource;
+use base64::Engine;
 use std::fs;
+use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -91,6 +93,7 @@ pub fn enml_to_text_with_resources(content_enml: &str, resources: &[Resource]) -
         &ImageOptions::default(),
         resources,
         false,
+        false,
     )
 }
 
@@ -99,12 +102,21 @@ pub fn enml_to_terminal_text(content_enml: &str) -> String {
 }
 
 pub fn enml_to_terminal_text_with_resources(content_enml: &str, resources: &[Resource]) -> String {
+    enml_to_terminal_text_with_options(content_enml, resources, false)
+}
+
+pub fn enml_to_terminal_text_with_options(
+    content_enml: &str,
+    resources: &[Resource],
+    render_images: bool,
+) -> String {
     enml_to_text_internal(
         content_enml,
         TextFormat::Markdown,
         &ImageOptions::default(),
         resources,
         true,
+        render_images,
     )
 }
 
@@ -113,7 +125,7 @@ pub fn enml_to_text_with_options(
     format: TextFormat,
     image_options: &ImageOptions,
 ) -> String {
-    enml_to_text_internal(content_enml, format, image_options, &[], false)
+    enml_to_text_internal(content_enml, format, image_options, &[], false, false)
 }
 
 fn enml_to_text_internal(
@@ -122,6 +134,7 @@ fn enml_to_text_internal(
     image_options: &ImageOptions,
     resources: &[Resource],
     terminal_styles: bool,
+    render_images: bool,
 ) -> String {
     let mut body = en_note_body(content_enml)
         .unwrap_or(content_enml)
@@ -135,6 +148,8 @@ fn enml_to_text_internal(
 
     if image_options.save_images {
         body = replace_media_with_images(&body, image_options, format == TextFormat::Html);
+    } else if render_images && format != TextFormat::Html {
+        body = replace_media_with_terminal_images(&body, resources);
     } else if format != TextFormat::Html {
         body = replace_media_with_placeholders(&body, resources);
     }
@@ -1106,6 +1121,86 @@ fn replace_media_with_images(content: &str, image_options: &ImageOptions, html: 
     }
     output.push_str(rest);
     output
+}
+
+fn replace_media_with_terminal_images(content: &str, resources: &[Resource]) -> String {
+    let mut output = String::new();
+    let mut rest = content;
+    let mut image_index = 0usize;
+
+    while let Some(index) = rest.find("<en-media") {
+        output.push_str(&rest[..index]);
+        rest = &rest[index + "<en-media".len()..];
+        let Some(end) = rest.find('>') else {
+            output.push_str("<en-media");
+            output.push_str(rest);
+            return output;
+        };
+        let tag = &rest[..end];
+        rest = &rest[end + 1..];
+
+        if let Some(image) = terminal_image_for_media(tag, resources, image_index) {
+            let filename = media_filename(
+                attr_value(tag, "type").as_deref(),
+                attr_value(tag, "hash").as_deref(),
+                resources,
+            );
+            image_index += 1;
+            output.push_str(&image);
+            output.push_str(&filename);
+            output.push_str("\n\n");
+        } else {
+            output.push_str(&format!("{}\n\n", media_placeholder(tag, resources)));
+        }
+    }
+    output.push_str(rest);
+    output
+}
+
+fn terminal_image_for_media(
+    tag: &str,
+    resources: &[Resource],
+    image_index: usize,
+) -> Option<String> {
+    let media_type = attr_value(tag, "type");
+    if !media_type
+        .as_deref()
+        .is_some_and(|value| value.starts_with("image/"))
+    {
+        return None;
+    }
+    let hash = attr_value(tag, "hash")?;
+    let resource = resources
+        .iter()
+        .find(|resource| resource.data.body_hash == hash)?;
+    if resource.data.body.is_empty() {
+        return None;
+    }
+    let path = write_terminal_image_temp_file(resource, image_index).ok()?;
+    Some(kitty_image_command(&path))
+}
+
+fn write_terminal_image_temp_file(resource: &Resource, image_index: usize) -> Result<PathBuf> {
+    let image = image::load_from_memory(&resource.data.body)
+        .map_err(|error| ReeknoteError::External(format!("cannot decode image: {error}")))?;
+    let mut png = Cursor::new(Vec::new());
+    image
+        .write_to(&mut png, image::ImageFormat::Png)
+        .map_err(|error| ReeknoteError::External(format!("cannot encode image as PNG: {error}")))?;
+    let mut file = tempfile::Builder::new()
+        .prefix(&format!("reeknote-image-{image_index}-"))
+        .suffix(".png")
+        .tempfile()?;
+    file.write_all(png.get_ref())?;
+    let (_, path) = file.keep().map_err(|error| error.error)?;
+    Ok(path)
+}
+
+fn kitty_image_command(path: &Path) -> String {
+    format!(
+        "\x1b_Ga=T,t=f,f=100,q=2;{}\x1b\\",
+        base64::engine::general_purpose::STANDARD.encode(path.to_string_lossy().as_bytes())
+    )
 }
 
 fn replace_media_with_placeholders(content: &str, resources: &[Resource]) -> String {

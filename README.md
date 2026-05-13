@@ -391,8 +391,9 @@ asks you to choose.
 When output goes to an interactive terminal, Reeknote visually highlights
 Evernote code blocks, inline code, quote blocks, italic text, and bold text.
 Inline links are rendered as blue Markdown links. Redirected output stays plain
-Markdown text. Images that are not downloaded are shown as placeholders with
-their file names, such as `[Image: photo.png]`.
+Markdown text. In Kitty, image attachments are shown inline in the terminal.
+Other terminals and redirected output show image placeholders with their file
+names, such as `[Image: photo.png]`.
 
 If a note has audio attachments and `show` is running in an interactive
 terminal, Reeknote asks whether to play them with the local `mpv` player. When

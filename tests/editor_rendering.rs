@@ -1,8 +1,10 @@
 use reeknote::editor::{
-    ImageInfo, ImageOptions, TextFormat, enml_to_terminal_text, enml_to_text,
-    enml_to_text_with_options, enml_to_text_with_resources, get_images, text_to_enml, wrap_enml,
+    ImageInfo, ImageOptions, TextFormat, enml_to_terminal_text, enml_to_terminal_text_with_options,
+    enml_to_text, enml_to_text_with_options, enml_to_text_with_resources, get_images, text_to_enml,
+    wrap_enml,
 };
 use reeknote::models::{Resource, ResourceData};
+use std::io::Cursor;
 
 const MD_TEXT: &str = "# Header 1\n\n## Header 2\n\nLine 1\n\n_Line 2_\n\n**Line 3**\n\n";
 const HTML_TEXT: &str = "<h1>Header 1</h1>\n<h2>Header 2</h2>\n<p>Line 1</p>\n<p><em>Line 2</em></p>\n<p><strong>Line 3</strong></p>\n";
@@ -156,6 +158,58 @@ fn converts_images_to_filename_placeholders() {
 fn converts_images_to_fallback_placeholders() {
     let note = wrap_enml(r#"<en-media type="image/png" hash="abc" />"#);
     assert_eq!(enml_to_text(&note), "[Image: image-abc.png]\n\n");
+}
+
+#[test]
+fn renders_images_for_kitty_terminal_output() {
+    let note = wrap_enml(r#"<en-media type="image/png" hash="abc" />"#);
+    let mut resource = resource("abc", "image/png", "photo.png");
+    resource.data.body = png_1x1();
+    resource.data.size = resource.data.body.len();
+    let text = enml_to_terminal_text_with_options(&note, &[resource], true);
+    assert!(text.contains("\x1b_Ga=T,t=f,f=100,q=2;"));
+    assert!(text.contains("\x1b\\photo.png\n\n"));
+    assert!(!text.contains("[Image:"));
+}
+
+#[test]
+fn renders_multiple_images_with_filenames_for_kitty_terminal_output() {
+    let note = wrap_enml(
+        r#"<en-media type="image/png" hash="abc" /><en-media type="image/png" hash="def" />"#,
+    );
+    let mut first = resource("abc", "image/png", "first.png");
+    first.data.body = png_1x1();
+    first.data.size = first.data.body.len();
+    let mut second = resource("def", "image/png", "second.png");
+    second.data.body = png_1x1();
+    second.data.size = second.data.body.len();
+
+    let text = enml_to_terminal_text_with_options(&note, &[first, second], true);
+
+    assert_eq!(text.matches("\x1b_Ga=T,t=f,f=100,q=2;").count(), 2);
+    assert!(text.contains("\x1b\\first.png\n\n"));
+    assert!(text.contains("\x1b\\second.png\n\n"));
+}
+
+#[test]
+fn falls_back_to_image_placeholder_when_terminal_image_data_is_missing() {
+    let note = wrap_enml(r#"<en-media type="image/png" hash="abc" />"#);
+    let text = enml_to_terminal_text_with_options(
+        &note,
+        &[resource("abc", "image/png", "photo.png")],
+        true,
+    );
+    assert_eq!(text, "[Image: photo.png]\n\n");
+}
+
+#[test]
+fn falls_back_to_image_placeholder_when_terminal_image_data_is_invalid() {
+    let note = wrap_enml(r#"<en-media type="image/png" hash="abc" />"#);
+    let mut resource = resource("abc", "image/png", "photo.png");
+    resource.data.body = b"not an image".to_vec();
+    resource.data.size = resource.data.body.len();
+    let text = enml_to_terminal_text_with_options(&note, &[resource], true);
+    assert_eq!(text, "[Image: photo.png]\n\n");
 }
 
 #[test]
@@ -360,4 +414,13 @@ fn resource(hash: &str, mime: &str, filename: &str) -> Resource {
             size: 0,
         },
     }
+}
+
+fn png_1x1() -> Vec<u8> {
+    let image = image::RgbaImage::from_pixel(1, 1, image::Rgba([0, 0, 0, 255]));
+    let mut bytes = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .expect("test PNG should encode");
+    bytes.into_inner()
 }

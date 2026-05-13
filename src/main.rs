@@ -10,6 +10,7 @@ use reeknote::reeknote as app;
 use reeknote::reeknote::{EvernoteClient, NotesService};
 use reeknote::storage::Storage;
 use std::collections::BTreeMap;
+use std::env;
 use std::fs;
 use std::io::{self, BufRead, BufReader, IsTerminal, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -312,6 +313,10 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
     } else {
         let user = user.unwrap_or_default();
         let terminal_styles = io::stdout().is_terminal();
+        let render_images = terminal_styles && kitty_graphics_supported();
+        if render_images {
+            hydrate_note_image_resources(&mut client, &mut note)?;
+        }
         print!(
             "{}",
             out::show_note_with_options(
@@ -319,7 +324,10 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
                 user.id,
                 &user.shard_id,
                 config,
-                out::ShowOptions { terminal_styles },
+                out::ShowOptions {
+                    terminal_styles,
+                    render_images,
+                },
             )
         );
         if terminal_styles && io::stdin().is_terminal() {
@@ -340,6 +348,30 @@ fn offer_audio_playback(client: &mut EdamClient, note: &Note) -> Result<()> {
     }
 
     play_audio_resources(client, &resources)
+}
+
+fn hydrate_note_image_resources(client: &mut EdamClient, note: &mut Note) -> Result<()> {
+    for resource in note.resources.iter_mut().filter(|resource| {
+        is_image_resource(resource) && resource.data.body.is_empty() && !resource.guid.is_empty()
+    }) {
+        resource.data.body = client.get_resource_data(&resource.guid)?;
+        resource.data.size = resource.data.body.len();
+    }
+    Ok(())
+}
+
+fn is_image_resource(resource: &Resource) -> bool {
+    resource
+        .mime
+        .as_deref()
+        .is_some_and(|mime| mime.to_ascii_lowercase().starts_with("image/"))
+}
+
+fn kitty_graphics_supported() -> bool {
+    env::var_os("KITTY_WINDOW_ID").is_some()
+        || env::var("TERM")
+            .map(|term| term.to_ascii_lowercase().contains("kitty"))
+            .unwrap_or(false)
 }
 
 fn audio_resources(note: &Note) -> Vec<&Resource> {

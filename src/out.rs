@@ -22,6 +22,7 @@ pub struct ListOptions {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ShowOptions {
     pub terminal_styles: bool,
+    pub render_images: bool,
 }
 
 pub fn print_line(line: &str) {
@@ -156,9 +157,10 @@ pub fn show_note_with_options(
     ));
     output.push_str(&separator('-', "CONTENT"));
     if options.terminal_styles {
-        output.push_str(&editor::enml_to_terminal_text_with_resources(
+        output.push_str(&editor::enml_to_terminal_text_with_options(
             &note.content,
             &note.resources,
+            options.render_images,
         ));
     } else {
         output.push_str(&editor::enml_to_text_with_resources(
@@ -477,6 +479,7 @@ mod tests {
             &config,
             ShowOptions {
                 terminal_styles: true,
+                ..ShowOptions::default()
             },
         );
         assert!(output.contains("\x1b[48;5;236;38;5;252m let answer = 42; \x1b[0m"));
@@ -499,6 +502,7 @@ mod tests {
             &config,
             ShowOptions {
                 terminal_styles: true,
+                ..ShowOptions::default()
             },
         );
         assert!(output.contains("\x1b[38;5;39m|\x1b[0m \x1b[3;38;5;245mQuoted line\x1b[0m"));
