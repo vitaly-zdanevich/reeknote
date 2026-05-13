@@ -78,6 +78,7 @@ pub struct ResourceData {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Resource {
+    pub guid: String,
     pub mime: Option<String>,
     pub filename: String,
     pub data: ResourceData,

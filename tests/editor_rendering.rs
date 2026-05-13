@@ -351,6 +351,7 @@ fn highlights_blockquotes_for_terminal_output() {
 
 fn resource(hash: &str, mime: &str, filename: &str) -> Resource {
     Resource {
+        guid: String::new(),
         mime: Some(mime.to_string()),
         filename: filename.to_string(),
         data: ResourceData {

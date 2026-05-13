@@ -236,6 +236,7 @@ mod tests {
             title: "Image Note".to_string(),
             content: editor::wrap_enml(&format!("<en-media type=\"image/png\" hash=\"{hash}\" />")),
             resources: vec![Resource {
+                guid: String::new(),
                 mime: Some("image/png".to_string()),
                 filename: "image.png".to_string(),
                 data: crate::models::ResourceData {

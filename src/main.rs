@@ -11,10 +11,12 @@ use reeknote::reeknote::{EvernoteClient, NotesService};
 use reeknote::storage::Storage;
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{self, IsTerminal, Read, Write};
+use std::io::{self, BufRead, BufReader, IsTerminal, Read, Write};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::{Child, Command};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const METADATA_CACHE_TTL_SECONDS: i64 = 3_600;
 const NOTEBOOKS_CACHE_UPDATED_AT: &str = "notebooks_cache_updated_at";
@@ -337,9 +339,7 @@ fn offer_audio_playback(client: &mut EdamClient, note: &Note) -> Result<()> {
         return Ok(());
     }
 
-    let note = client.get_note_with_resources(&note.guid)?;
-    let resources = audio_resources(&note);
-    play_audio_resources(&resources)
+    play_audio_resources(client, &resources)
 }
 
 fn audio_resources(note: &Note) -> Vec<&Resource> {
@@ -386,16 +386,24 @@ fn audio_attachment_name(resource: &Resource, index: usize) -> String {
     format!("audio attachment {index}")
 }
 
-fn play_audio_resources(resources: &[&Resource]) -> Result<()> {
-    let paths = write_audio_temp_files(resources)?;
-    if paths.is_empty() {
-        return Err(ReeknoteError::External(
-            "audio attachment data is empty".to_string(),
-        ));
+fn play_audio_resources(client: &mut EdamClient, resources: &[&Resource]) -> Result<()> {
+    let session = AudioPlaybackSession::new();
+    let mut paths = Vec::new();
+    let first_path = download_audio_temp_file(client, resources[0], &session, 0)?;
+    paths.push(first_path.clone());
+
+    if resources.len() == 1 {
+        return play_single_audio_file(&first_path, &paths);
     }
 
-    let status = Command::new("mpv").args(&paths).status();
+    let mut child = start_mpv_playlist(&first_path, &session.ipc_path)?;
+    let mut ipc = connect_mpv_ipc(&session.ipc_path)?;
+    let queue_result = queue_remaining_audio(client, resources, &session, &mut paths, &mut ipc);
+    let _ = ipc.send_idle(false);
+    let status = child.wait();
     cleanup_temp_files(&paths);
+
+    queue_result?;
     let status = status?;
     if status.success() {
         Ok(())
@@ -406,25 +414,185 @@ fn play_audio_resources(resources: &[&Resource]) -> Result<()> {
     }
 }
 
+fn play_single_audio_file(path: &Path, cleanup_paths: &[PathBuf]) -> Result<()> {
+    let status = Command::new("mpv").arg(path).status();
+    cleanup_temp_files(cleanup_paths);
+    let status = status?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(ReeknoteError::External(format!(
+            "mpv exited with status {status}"
+        )))
+    }
+}
+
+fn start_mpv_playlist(first_path: &Path, ipc_path: &Path) -> Result<Child> {
+    let child = Command::new("mpv")
+        .arg("--idle=yes")
+        .arg(format!("--input-ipc-server={}", ipc_path.display()))
+        .arg(first_path)
+        .spawn()?;
+    Ok(child)
+}
+
+fn connect_mpv_ipc(ipc_path: &Path) -> Result<MpvIpc> {
+    for _ in 0..100 {
+        if let Ok(ipc) = MpvIpc::connect(ipc_path) {
+            return Ok(ipc);
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    Err(ReeknoteError::External(
+        "mpv IPC socket was not ready".to_string(),
+    ))
+}
+
+fn queue_remaining_audio(
+    client: &mut EdamClient,
+    resources: &[&Resource],
+    session: &AudioPlaybackSession,
+    paths: &mut Vec<PathBuf>,
+    ipc: &mut MpvIpc,
+) -> Result<()> {
+    for (index, resource) in resources.iter().enumerate().skip(1) {
+        let path = download_audio_temp_file(client, resource, session, index)?;
+        ipc.send_loadfile(&path)?;
+        paths.push(path);
+    }
+    Ok(())
+}
+
+fn download_audio_temp_file(
+    client: &mut EdamClient,
+    resource: &Resource,
+    session: &AudioPlaybackSession,
+    index: usize,
+) -> Result<PathBuf> {
+    let body = audio_resource_body(client, resource)?;
+    if body.is_empty() {
+        return Err(ReeknoteError::External(format!(
+            "audio attachment \"{}\" is empty",
+            audio_attachment_name(resource, index + 1)
+        )));
+    }
+    let path = audio_temp_path(resource, session.timestamp, index);
+    fs::write(&path, body)?;
+    Ok(path)
+}
+
+fn audio_resource_body(client: &mut EdamClient, resource: &Resource) -> Result<Vec<u8>> {
+    if !resource.data.body.is_empty() {
+        return Ok(resource.data.body.clone());
+    }
+    if resource.guid.is_empty() {
+        return Err(ReeknoteError::External(format!(
+            "audio attachment \"{}\" has no resource GUID",
+            audio_attachment_name(resource, 1)
+        )));
+    }
+    client.get_resource_data(&resource.guid)
+}
+
+#[cfg(test)]
 fn write_audio_temp_files(resources: &[&Resource]) -> Result<Vec<PathBuf>> {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default();
+    let session = AudioPlaybackSession::new();
     let mut paths = Vec::new();
     for (index, resource) in resources.iter().enumerate() {
         if resource.data.body.is_empty() {
             continue;
         }
-        let extension = audio_extension(resource);
-        let path = std::env::temp_dir().join(format!(
-            "reeknote-audio-{}-{timestamp}-{index}.{extension}",
-            std::process::id()
-        ));
+        let path = audio_temp_path(resource, session.timestamp, index);
         fs::write(&path, &resource.data.body)?;
         paths.push(path);
     }
     Ok(paths)
+}
+
+fn audio_temp_path(resource: &Resource, timestamp: u128, index: usize) -> PathBuf {
+    let extension = audio_extension(resource);
+    std::env::temp_dir().join(format!(
+        "reeknote-audio-{}-{timestamp}-{index}.{extension}",
+        std::process::id()
+    ))
+}
+
+#[derive(Clone, Debug)]
+struct AudioPlaybackSession {
+    timestamp: u128,
+    ipc_path: PathBuf,
+}
+
+impl AudioPlaybackSession {
+    fn new() -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        Self {
+            timestamp,
+            ipc_path: std::env::temp_dir().join(format!(
+                "reeknote-mpv-{}-{timestamp}.sock",
+                std::process::id()
+            )),
+        }
+    }
+}
+
+struct MpvIpc {
+    writer: UnixStream,
+    reader: BufReader<UnixStream>,
+}
+
+impl MpvIpc {
+    fn connect(path: &Path) -> Result<Self> {
+        let writer = UnixStream::connect(path)?;
+        let reader = BufReader::new(writer.try_clone()?);
+        Ok(Self { writer, reader })
+    }
+
+    fn send_loadfile(&mut self, path: &Path) -> Result<()> {
+        self.send_command(&mpv_loadfile_command(path))
+    }
+
+    fn send_idle(&mut self, idle: bool) -> Result<()> {
+        let value = if idle { "yes" } else { "no" };
+        self.send_command(&format!(r#"{{"command":["set","idle","{value}"]}}"#))
+    }
+
+    fn send_command(&mut self, command: &str) -> Result<()> {
+        self.writer.write_all(command.as_bytes())?;
+        self.writer.write_all(b"\n")?;
+        self.writer.flush()?;
+        let mut response = String::new();
+        self.reader.read_line(&mut response)?;
+        Ok(())
+    }
+}
+
+fn mpv_loadfile_command(path: &Path) -> String {
+    format!(
+        r#"{{"command":["loadfile","{}","append-play"]}}"#,
+        json_escape(&path.to_string_lossy())
+    )
+}
+
+fn json_escape(value: &str) -> String {
+    let mut output = String::new();
+    for character in value.chars() {
+        match character {
+            '"' => output.push_str("\\\""),
+            '\\' => output.push_str("\\\\"),
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '\t' => output.push_str("\\t"),
+            character if character.is_control() => {
+                output.push_str(&format!("\\u{:04x}", character as u32));
+            }
+            character => output.push(character),
+        }
+    }
+    output
 }
 
 fn cleanup_temp_files(paths: &[PathBuf]) {
@@ -1421,6 +1589,7 @@ mod tests {
 
     fn test_resource(mime: &str, filename: &str, body_hash: &str, body: &[u8]) -> Resource {
         Resource {
+            guid: body_hash.to_string(),
             mime: Some(mime.to_string()),
             filename: filename.to_string(),
             data: reeknote::models::ResourceData {

@@ -41,6 +41,7 @@ pub trait EvernoteClient {
     fn get_note(&mut self, guid: &str) -> Result<Note>;
     fn get_note_with_resources(&mut self, guid: &str) -> Result<Note>;
     fn get_note_content(&mut self, guid: &str) -> Result<String>;
+    fn get_resource_data(&mut self, guid: &str) -> Result<Vec<u8>>;
     fn get_note_tag_names(&mut self, guid: &str) -> Result<Vec<String>>;
     fn find_notes(&mut self, query: &str, count: usize, deleted_only: bool)
     -> Result<SearchResult>;
@@ -83,6 +84,10 @@ impl EvernoteClient for UnsupportedEvernoteClient {
     }
 
     fn get_note_content(&mut self, _guid: &str) -> Result<String> {
+        self.unsupported()
+    }
+
+    fn get_resource_data(&mut self, _guid: &str) -> Result<Vec<u8>> {
         self.unsupported()
     }
 

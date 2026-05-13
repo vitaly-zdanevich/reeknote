@@ -327,6 +327,14 @@ impl EvernoteClient for EdamClient {
             .map_err(map_thrift_error)
     }
 
+    fn get_resource_data(&mut self, guid: &str) -> Result<Vec<u8>> {
+        let token = self.auth_token.clone();
+        let mut note_store = self.note_store()?;
+        note_store
+            .get_resource_data(token, guid.to_string())
+            .map_err(map_thrift_error)
+    }
+
     fn get_note_tag_names(&mut self, guid: &str) -> Result<Vec<String>> {
         let token = self.auth_token.clone();
         let mut note_store = self.note_store()?;
@@ -805,6 +813,7 @@ fn resource_from_edam(resource: edam_types::Resource) -> Resource {
         .and_then(|attributes| attributes.file_name)
         .unwrap_or_default();
     Resource {
+        guid: resource.guid.unwrap_or_default(),
         mime: resource.mime,
         filename,
         data: ResourceData {

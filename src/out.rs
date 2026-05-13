@@ -512,6 +512,7 @@ mod tests {
             title: "testnote".to_string(),
             content: editor::wrap_enml(r#"<en-media type="image/png" hash="abc" />"#),
             resources: vec![Resource {
+                guid: String::new(),
                 mime: Some("image/png".to_string()),
                 filename: "photo.png".to_string(),
                 data: ResourceData {
