@@ -1236,7 +1236,15 @@ fn media_placeholder(tag: &str, resources: &[Resource]) -> String {
         "Attachment"
     };
     let filename = media_filename(media_type.as_deref(), hash.as_deref(), resources);
-    format!("[{label}: {filename}]")
+    let prefix = if media_type
+        .as_deref()
+        .is_some_and(|value| value.to_ascii_lowercase().starts_with("audio/"))
+    {
+        "🎧 "
+    } else {
+        ""
+    };
+    format!("{prefix}[{label}: {filename}]")
 }
 
 fn media_filename(media_type: Option<&str>, hash: Option<&str>, resources: &[Resource]) -> String {

@@ -229,6 +229,16 @@ fn converts_attachments_to_filename_placeholders() {
 }
 
 #[test]
+fn prepends_emoji_to_audio_attachment_placeholders() {
+    let note = wrap_enml(r#"<en-media type="audio/mpeg" hash="abc" />"#);
+    let resources = vec![resource("abc", "audio/mpeg", "voice.mp3")];
+    assert_eq!(
+        enml_to_text_with_resources(&note, &resources),
+        "🎧 [Attachment: voice.mp3]\n\n"
+    );
+}
+
+#[test]
 fn converts_pre_blocks_to_markdown_code_blocks() {
     let text = enml_to_text(&wrap_enml("<pre>let answer = 42;</pre>"));
     assert_eq!(text, "```\nlet answer = 42;\n```\n\n");
