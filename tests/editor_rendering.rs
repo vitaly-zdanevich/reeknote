@@ -173,6 +173,18 @@ fn renders_images_for_kitty_terminal_output() {
 }
 
 #[test]
+fn renders_webp_images_even_when_evernote_labels_them_png() {
+    let note = wrap_enml(r#"<en-media type="image/png" hash="abc" />"#);
+    let mut resource = resource("abc", "image/png", "photo.png");
+    resource.data.body = webp_1x1();
+    resource.data.size = resource.data.body.len();
+    let text = enml_to_terminal_text_with_options(&note, &[resource], true);
+    assert!(text.contains("\x1b_Ga=T,t=f,f=100,q=2;"));
+    assert!(text.contains("\x1b\\photo.png\n\n"));
+    assert!(!text.contains("[Image:"));
+}
+
+#[test]
 fn renders_multiple_images_with_filenames_for_kitty_terminal_output() {
     let note = wrap_enml(
         r#"<en-media type="image/png" hash="abc" /><en-media type="image/png" hash="def" />"#,
@@ -432,5 +444,14 @@ fn png_1x1() -> Vec<u8> {
     image::DynamicImage::ImageRgba8(image)
         .write_to(&mut bytes, image::ImageFormat::Png)
         .expect("test PNG should encode");
+    bytes.into_inner()
+}
+
+fn webp_1x1() -> Vec<u8> {
+    let image = image::RgbaImage::from_pixel(1, 1, image::Rgba([0, 0, 0, 255]));
+    let mut bytes = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut bytes, image::ImageFormat::WebP)
+        .expect("test WebP should encode");
     bytes.into_inner()
 }

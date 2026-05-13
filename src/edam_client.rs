@@ -553,6 +553,26 @@ impl EdamClient {
             .map_err(map_thrift_error)?;
         Ok(note_from_edam(note))
     }
+
+    pub fn get_resource_by_hash(
+        &mut self,
+        note_guid: &str,
+        content_hash: &[u8],
+    ) -> Result<Resource> {
+        let token = self.auth_token.clone();
+        let mut note_store = self.note_store()?;
+        note_store
+            .get_resource_by_hash(
+                token,
+                note_guid.to_string(),
+                content_hash.to_vec(),
+                true,
+                false,
+                false,
+            )
+            .map(resource_from_edam)
+            .map_err(map_thrift_error)
+    }
 }
 
 #[derive(Clone)]

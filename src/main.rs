@@ -350,14 +350,117 @@ fn offer_audio_playback(client: &mut EdamClient, note: &Note) -> Result<()> {
     play_audio_resources(client, &resources)
 }
 
-fn hydrate_note_image_resources(client: &mut EdamClient, note: &mut Note) -> Result<()> {
-    for resource in note.resources.iter_mut().filter(|resource| {
-        is_image_resource(resource) && resource.data.body.is_empty() && !resource.guid.is_empty()
-    }) {
-        resource.data.body = client.get_resource_data(&resource.guid)?;
-        resource.data.size = resource.data.body.len();
+trait ImageResourceSource {
+    fn get_image_resource_data(&mut self, guid: &str) -> Result<Vec<u8>>;
+    fn get_image_resource_by_hash(
+        &mut self,
+        note_guid: &str,
+        content_hash: &[u8],
+    ) -> Result<Resource>;
+}
+
+impl ImageResourceSource for EdamClient {
+    fn get_image_resource_data(&mut self, guid: &str) -> Result<Vec<u8>> {
+        self.get_resource_data(guid)
     }
+
+    fn get_image_resource_by_hash(
+        &mut self,
+        note_guid: &str,
+        content_hash: &[u8],
+    ) -> Result<Resource> {
+        self.get_resource_by_hash(note_guid, content_hash)
+    }
+}
+
+fn hydrate_note_image_resources(
+    source: &mut impl ImageResourceSource,
+    note: &mut Note,
+) -> Result<()> {
+    let note_guid = note.guid.clone();
+    for resource in note
+        .resources
+        .iter_mut()
+        .filter(|resource| is_image_resource(resource) && resource.data.body.is_empty())
+    {
+        hydrate_note_image_resource(source, &note_guid, resource)?;
+    }
+
     Ok(())
+}
+
+fn hydrate_note_image_resource(
+    source: &mut impl ImageResourceSource,
+    note_guid: &str,
+    resource: &mut Resource,
+) -> Result<()> {
+    if !resource.guid.is_empty() {
+        resource.data.body = source.get_image_resource_data(&resource.guid)?;
+        resource.data.size = resource.data.body.len();
+        fill_missing_resource_hash(resource);
+    }
+
+    if resource.data.body.is_empty()
+        && let Some(content_hash) = decode_hex_hash(&resource.data.body_hash)
+    {
+        let fetched = source.get_image_resource_by_hash(note_guid, &content_hash)?;
+        merge_hydrated_resource(resource, fetched);
+        fill_missing_resource_hash(resource);
+    }
+
+    Ok(())
+}
+
+fn fill_missing_resource_hash(resource: &mut Resource) {
+    if resource.data.body_hash.is_empty() && !resource.data.body.is_empty() {
+        resource.data.body_hash = format!("{:x}", md5::compute(&resource.data.body));
+    }
+}
+
+fn merge_hydrated_resource(resource: &mut Resource, fetched: Resource) {
+    if resource.guid.is_empty() {
+        resource.guid = fetched.guid;
+    }
+    if resource.mime.is_none() {
+        resource.mime = fetched.mime;
+    }
+    if resource.filename.is_empty() {
+        resource.filename = fetched.filename;
+    }
+    if !fetched.data.body_hash.is_empty() && resource.data.body_hash.is_empty() {
+        resource.data.body_hash = fetched.data.body_hash;
+    }
+    if !fetched.data.body.is_empty() {
+        resource.data.body = fetched.data.body;
+        resource.data.size = if fetched.data.size == 0 {
+            resource.data.body.len()
+        } else {
+            fetched.data.size
+        };
+    }
+}
+
+fn decode_hex_hash(hash: &str) -> Option<Vec<u8>> {
+    if hash.len() % 2 != 0 {
+        return None;
+    }
+
+    let mut bytes = Vec::with_capacity(hash.len() / 2);
+    for chunk in hash.as_bytes().chunks_exact(2) {
+        let high = hex_value(chunk[0])?;
+        let low = hex_value(chunk[1])?;
+        bytes.push((high << 4) | low);
+    }
+    Some(bytes)
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn is_image_resource(resource: &Resource) -> bool {
@@ -365,6 +468,15 @@ fn is_image_resource(resource: &Resource) -> bool {
         .mime
         .as_deref()
         .is_some_and(|mime| mime.to_ascii_lowercase().starts_with("image/"))
+        || Path::new(&resource.filename)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                matches!(
+                    extension.to_ascii_lowercase().as_str(),
+                    "gif" | "jpg" | "jpeg" | "png"
+                )
+            })
 }
 
 fn kitty_graphics_supported() -> bool {
@@ -1586,6 +1698,92 @@ mod tests {
     }
 
     #[test]
+    fn detects_image_resources_by_filename() {
+        let resource = test_resource("application/octet-stream", "photo.png", "abc", b"");
+        assert!(is_image_resource(&resource));
+    }
+
+    #[test]
+    fn hydrates_image_resources_by_filename_and_fills_missing_hash() {
+        let body = b"png bytes".to_vec();
+        let expected_hash = format!("{:x}", md5::compute(&body));
+        let mut source = TestImageResourceSource {
+            data_by_guid: BTreeMap::from([("resource-guid".to_string(), body.clone())]),
+            ..TestImageResourceSource::default()
+        };
+        let mut note = Note {
+            resources: vec![Resource {
+                guid: "resource-guid".to_string(),
+                mime: Some("application/octet-stream".to_string()),
+                filename: "photo.png".to_string(),
+                data: reeknote::models::ResourceData::default(),
+            }],
+            ..Note::default()
+        };
+
+        hydrate_note_image_resources(&mut source, &mut note).unwrap();
+
+        assert_eq!(note.resources[0].data.body, body);
+        assert_eq!(note.resources[0].data.body_hash, expected_hash);
+        assert_eq!(note.resources[0].data.size, 9);
+    }
+
+    #[test]
+    fn hydrates_image_resources_by_hash_when_guid_is_missing() {
+        let hash = "2df3d950b7a4275eb77e2ddda8c8676f";
+        let hash_bytes = decode_hex_hash(hash).unwrap();
+        let body = b"image bytes".to_vec();
+        let mut source = TestImageResourceSource {
+            resources_by_hash: BTreeMap::from([(
+                ("note-guid".to_string(), hash_bytes.clone()),
+                Resource {
+                    guid: "fetched-guid".to_string(),
+                    mime: Some("image/png".to_string()),
+                    filename: "fetched.png".to_string(),
+                    data: reeknote::models::ResourceData {
+                        body_hash: hash.to_string(),
+                        body: body.clone(),
+                        size: body.len(),
+                    },
+                },
+            )]),
+            ..TestImageResourceSource::default()
+        };
+        let mut note = Note {
+            guid: "note-guid".to_string(),
+            resources: vec![Resource {
+                guid: String::new(),
+                mime: Some("image/png".to_string()),
+                filename: "image.png".to_string(),
+                data: reeknote::models::ResourceData {
+                    body_hash: hash.to_string(),
+                    body: Vec::new(),
+                    size: 0,
+                },
+            }],
+            ..Note::default()
+        };
+
+        hydrate_note_image_resources(&mut source, &mut note).unwrap();
+
+        assert_eq!(source.requested_guids, Vec::<String>::new());
+        assert_eq!(
+            source.requested_hashes,
+            vec![("note-guid".to_string(), hash_bytes)]
+        );
+        assert_eq!(note.resources[0].guid, "fetched-guid");
+        assert_eq!(note.resources[0].filename, "image.png");
+        assert_eq!(note.resources[0].data.body, body);
+    }
+
+    #[test]
+    fn decodes_hex_hash_case_insensitively() {
+        assert_eq!(decode_hex_hash("0a1Bff"), Some(vec![10, 27, 255]));
+        assert_eq!(decode_hex_hash("abc"), None);
+        assert_eq!(decode_hex_hash("zz"), None);
+    }
+
+    #[test]
     fn formats_audio_playback_confirmation_for_multiple_resources() {
         let first = test_resource("audio/mpeg", "voice.mp3", "abc", b"");
         let second = test_resource("audio/ogg", "", "abcdef123456", b"");
@@ -1629,6 +1827,31 @@ mod tests {
                 body: body.to_vec(),
                 size: body.len(),
             },
+        }
+    }
+
+    #[derive(Default)]
+    struct TestImageResourceSource {
+        data_by_guid: BTreeMap<String, Vec<u8>>,
+        resources_by_hash: BTreeMap<(String, Vec<u8>), Resource>,
+        requested_guids: Vec<String>,
+        requested_hashes: Vec<(String, Vec<u8>)>,
+    }
+
+    impl ImageResourceSource for TestImageResourceSource {
+        fn get_image_resource_data(&mut self, guid: &str) -> Result<Vec<u8>> {
+            self.requested_guids.push(guid.to_string());
+            Ok(self.data_by_guid.remove(guid).unwrap_or_default())
+        }
+
+        fn get_image_resource_by_hash(
+            &mut self,
+            note_guid: &str,
+            content_hash: &[u8],
+        ) -> Result<Resource> {
+            let key = (note_guid.to_string(), content_hash.to_vec());
+            self.requested_hashes.push(key.clone());
+            Ok(self.resources_by_hash.remove(&key).unwrap_or_default())
         }
     }
 }

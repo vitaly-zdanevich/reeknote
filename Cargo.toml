@@ -1,6 +1,6 @@
 [package]
 name = "reeknote"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2024"
 description = "Command-line Evernote client"
 license = "GPL-3.0-only"
@@ -18,7 +18,7 @@ path = "src/main.rs"
 [dependencies]
 base64 = "0.22"
 evernote = "0.1.2"
-image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png"] }
+image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 md5 = "0.7"
 mime_guess = "2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
