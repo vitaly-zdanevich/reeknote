@@ -474,7 +474,7 @@ fn is_image_resource(resource: &Resource) -> bool {
             .is_some_and(|extension| {
                 matches!(
                     extension.to_ascii_lowercase().as_str(),
-                    "gif" | "jpg" | "jpeg" | "png"
+                    "gif" | "jpg" | "jpeg" | "png" | "webp"
                 )
             })
 }
@@ -1790,6 +1790,8 @@ mod tests {
     #[test]
     fn detects_image_resources_by_filename() {
         let resource = test_resource("application/octet-stream", "photo.png", "abc", b"");
+        assert!(is_image_resource(&resource));
+        let resource = test_resource("application/octet-stream", "photo.webp", "abc", b"");
         assert!(is_image_resource(&resource));
     }
 
