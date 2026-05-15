@@ -19,6 +19,8 @@ It allows you to:
 This document shows how to work with Evernote notes, notebooks, tags, and
 `gnsync` using Reeknote.
 
+![Reeknote screenshot](screenshot.webp)
+
 ## Installation
 
 ### Build From Source
