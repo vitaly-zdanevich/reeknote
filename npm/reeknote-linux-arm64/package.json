@@ -1,7 +1,7 @@
 {
   "name": "reeknote-linux-arm64",
   "version": "0.7.0",
-  "description": "Linux ARM64 binaries for Reeknote",
+  "description": "Linux ARM64 binary for reeknote",
   "license": "GPL-3.0-only",
   "homepage": "https://gitlab.com/vitaly-zdanevich/reeknote",
   "repository": {
@@ -15,6 +15,6 @@
     "arm64"
   ],
   "files": [
-    "bin/"
+    "bin/reeknote"
   ]
 }

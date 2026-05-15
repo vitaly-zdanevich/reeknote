@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn creates_file_with_non_ascii_content() {
-        let dir = std::env::temp_dir().join(format!("reeknote-gnsync-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("reeknote-rnsync-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let note = Note {
             title: "Test Note".to_string(),
@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn saves_image_resources_next_to_exported_note() {
         let dir =
-            std::env::temp_dir().join(format!("reeknote-gnsync-images-{}", std::process::id()));
+            std::env::temp_dir().join(format!("reeknote-rnsync-images-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let body = b"fake png".to_vec();
         let hash = format!("{:x}", md5::compute(&body));

@@ -24,6 +24,6 @@ class Reeknote < Formula
 
   test do
     assert_match "Reeknote - a command line client for Evernote.", shell_output("#{bin}/reeknote")
-    assert_match "Usage: gnsync", shell_output("#{bin}/gnsync --help")
+    assert_match "Usage: rnsync", shell_output("#{bin}/rnsync --help")
   end
 end

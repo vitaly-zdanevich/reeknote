@@ -14,7 +14,6 @@ include = [
     "Cargo.toml",
     "LICENSE",
     "README.md",
-    "pyproject.toml",
     "screenshot.webp",
     "src/**",
     "tests/**",
@@ -23,6 +22,10 @@ include = [
 [[bin]]
 name = "reeknote"
 path = "src/main.rs"
+
+[[bin]]
+name = "rnsync"
+path = "src/bin/rnsync.rs"
 
 [dependencies]
 base64 = "0.22"

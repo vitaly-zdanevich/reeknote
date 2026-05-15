@@ -1,7 +1,7 @@
 {
-  "name": "reeknote-linux-x64",
+  "name": "@vitaly-zdanevich/rnsync-linux-arm64",
   "version": "0.7.0",
-  "description": "Linux x64 binary for reeknote",
+  "description": "Linux ARM64 binary for rnsync",
   "license": "GPL-3.0-only",
   "homepage": "https://gitlab.com/vitaly-zdanevich/reeknote",
   "repository": {
@@ -12,9 +12,9 @@
     "linux"
   ],
   "cpu": [
-    "x64"
+    "arm64"
   ],
   "files": [
-    "bin/reeknote"
+    "bin/rnsync"
   ]
 }

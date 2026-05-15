@@ -41,8 +41,8 @@ fn reeknote_invalid_command_snapshot() {
 }
 
 #[test]
-fn gnsync_help_snapshot() {
-    assert_cli_snapshot("gnsync_help", gnsync_bin(), &["--help"], None);
+fn rnsync_help_snapshot() {
+    assert_cli_snapshot("rnsync_help", rnsync_bin(), &["--help"], None);
 }
 
 fn assert_cli_snapshot(name: &str, bin: &str, args: &[&str], app_dir: Option<&Path>) {
@@ -122,6 +122,6 @@ fn reeknote_bin() -> &'static str {
     env!("CARGO_BIN_EXE_reeknote")
 }
 
-fn gnsync_bin() -> &'static str {
-    env!("CARGO_BIN_EXE_gnsync")
+fn rnsync_bin() -> &'static str {
+    env!("CARGO_BIN_EXE_rnsync")
 }

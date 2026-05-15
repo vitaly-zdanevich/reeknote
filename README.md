@@ -13,11 +13,11 @@ It allows you to:
 * search Evernote from the console using filters;
 * show notes in the terminal;
 * edit notes using any editor, such as nano, vim, emacs, or mcedit;
-* download notes to local files with `gnsync`;
+* download notes to local files with `rnsync`;
 * use Evernote from cron jobs and scripts.
 
 This document shows how to work with Evernote notes, notebooks, tags, and
-`gnsync` using Reeknote.
+`rnsync` using Reeknote.
 
 ![Reeknote screenshot](screenshot.webp)
 
@@ -34,14 +34,25 @@ cargo build --release --bins
 The binaries will be written to:
 
 * `target/release/reeknote`
-* `target/release/gnsync`
+* `target/release/rnsync`
 
 To build only one binary:
 
 ```sh
 cargo build --release --bin reeknote
-cargo build --release --bin gnsync
+cargo build --release --bin rnsync
 ```
+
+### Install With Cargo
+
+When Reeknote is published on crates.io:
+
+```sh
+cargo install reeknote
+```
+
+This installs the `reeknote` and `rnsync` binaries into Cargo's binary
+directory, usually `~/.cargo/bin`.
 
 ### Install Locally With Cargo
 
@@ -51,8 +62,8 @@ From the repository root:
 cargo install --path .
 ```
 
-This installs the `reeknote` and `gnsync` binaries into Cargo's binary
-directory, usually `~/.cargo/bin`.
+This installs the local checkout's `reeknote` and `rnsync` binaries into
+Cargo's binary directory, usually `~/.cargo/bin`.
 
 ### Install With Homebrew
 
@@ -71,21 +82,23 @@ brew install mpv
 
 ### Install With pipx
 
-Reeknote can be installed from PyPI with `pipx`:
+Reeknote and rnsync can be installed from PyPI with `pipx`:
 
 ```sh
 pipx install reeknote
+pipx install rnsync
 ```
 
 ### Install With npm
 
-Reeknote can be installed from npm:
+Reeknote and rnsync can be installed from npm:
 
 ```sh
 npm install -g reeknote
+npm install -g @vitaly-zdanevich/rnsync
 ```
 
-The npm package currently provides Linux x64 and Linux ARM64 binaries.
+The npm packages currently provide Linux x64 and Linux ARM64 binaries.
 
 ### Uninstallation
 
@@ -121,11 +134,11 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * tests;
 * Linux x86_64 release builds;
 * Linux ARM64 release builds;
-* Linux x86_64 and ARM64 PyPI wheel builds;
-* PyPI source distribution builds;
-* npm package builds for Linux x64 and ARM64.
+* Linux x86_64 and ARM64 PyPI wheel builds for `reeknote` and `rnsync`;
+* npm package builds for `reeknote` and `rnsync` on Linux x64 and ARM64;
+* crates.io package publishing for the `reeknote` Cargo package.
 
-Each build uploads a temporary artifact containing `reeknote`, `gnsync`, and
+Each build uploads a temporary artifact containing `reeknote`, `rnsync`, and
 a SHA-256 checksum. Version tag pipelines also upload those archives to the
 GitLab Generic Package Registry and create a GitLab Release with durable
 download links.
@@ -133,15 +146,21 @@ download links.
 Released Linux binaries are available from the project's GitLab Releases page.
 
 Version tag pipelines publish PyPI wheels through PyPI Trusted Publishing. To
-enable the first publish, configure a PyPI pending publisher for project
-`reeknote` with namespace `vitaly-zdanevich`, project `reeknote`, workflow
-`.gitlab-ci.yml`, and environment `release`.
+enable the first publish, configure PyPI pending publishers for projects
+`reeknote` and `rnsync` with namespace `vitaly-zdanevich`, project `reeknote`,
+workflow `.gitlab-ci.yml`, and environment `release`.
 
 Version tag pipelines publish npm packages through npm Trusted Publishing. To
 enable the first publish, configure npm trusted publishers for `reeknote`,
-`reeknote-linux-x64`, and `reeknote-linux-arm64` with namespace
-`vitaly-zdanevich`, project `reeknote`, CI file `.gitlab-ci.yml`, and
-environment `release`.
+`reeknote-linux-x64`, `reeknote-linux-arm64`, `@vitaly-zdanevich/rnsync`,
+`@vitaly-zdanevich/rnsync-linux-x64`, and
+`@vitaly-zdanevich/rnsync-linux-arm64` with namespace `vitaly-zdanevich`,
+project `reeknote`, CI file `.gitlab-ci.yml`, and environment `release`.
+
+Version tag pipelines publish the Rust crate to crates.io with `cargo publish`.
+Configure a protected masked GitLab CI variable named `CRATES_IO_TOKEN`
+containing a crates.io API token with publish rights for the `reeknote` crate.
+The crates.io package installs both `reeknote` and `rnsync`.
 
 The runner tags in `.gitlab-ci.yml` target GitLab.com hosted Linux runners. If
 this project uses self-managed or differently tagged runners, adjust the
@@ -703,16 +722,16 @@ Options:
 | `--tagname` | tag name | Existing tag to remove. |
 | `--force` | | Do not ask for confirmation. |
 
-## gnsync - Synchronization App
+## rnsync - Synchronization App
 
-`gnsync` is an additional application built with Reeknote. In this Rust client,
-`gnsync` currently downloads notes to local files. It does not create, update,
+`rnsync` is an additional application built with Reeknote. In this Rust client,
+`rnsync` currently downloads notes to local files. It does not create, update,
 or delete Evernote notes.
 
 Synopsis:
 
 ```sh
-gnsync --path <path to directory>
+rnsync --path <path to directory>
        [--mask <unix shell-style wildcard, such as *.md>]
        [--format <plain|markdown|html>]
        [--notebook <notebook>]
@@ -742,8 +761,8 @@ Options:
 Examples:
 
 ```sh
-gnsync --path ~/notes --notebook "Work" --format markdown --download-only
-gnsync --path ~/evernote-backup --all --format html --save-images --images-in-subdir
+rnsync --path ~/notes --notebook "Work" --format markdown --download-only
+rnsync --path ~/evernote-backup --all --format html --save-images --images-in-subdir
 ```
 
 ## Original Contributors

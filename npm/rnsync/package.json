@@ -1,0 +1,33 @@
+{
+  "name": "@vitaly-zdanevich/rnsync",
+  "version": "0.7.0",
+  "description": "Evernote note synchronization CLI",
+  "license": "GPL-3.0-only",
+  "homepage": "https://gitlab.com/vitaly-zdanevich/reeknote",
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/vitaly-zdanevich/reeknote.git"
+  },
+  "keywords": [
+    "evernote",
+    "geeknote",
+    "notes",
+    "cli",
+    "sync"
+  ],
+  "bin": {
+    "rnsync": "bin/rnsync"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md"
+  ],
+  "optionalDependencies": {
+    "@vitaly-zdanevich/rnsync-linux-arm64": "0.7.0",
+    "@vitaly-zdanevich/rnsync-linux-x64": "0.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -2,8 +2,8 @@ use reeknote::config::Config;
 use reeknote::edam_client::EdamClient;
 use reeknote::editor::ImageOptions;
 use reeknote::errors::{ReeknoteError, Result};
-use reeknote::gnsync::{self, SyncFormat};
 use reeknote::reeknote::{EvernoteClient, NotesService};
+use reeknote::rnsync::{self, SyncFormat};
 use reeknote::storage::Storage;
 use std::path::{Path, PathBuf};
 
@@ -44,14 +44,14 @@ fn run(args: Vec<String>) -> Result<()> {
         for notebook in client.find_linked_notebooks()? {
             let notebook_path = args
                 .path
-                .join(gnsync::escape_path_component(&notebook.share_name));
+                .join(rnsync::escape_path_component(&notebook.share_name));
             let notes = client.download_linked_notebook_notes(
                 &notebook,
                 args.count,
                 args.image_options.save_images,
             )?;
             for note in notes {
-                let path = gnsync::create_file_from_note(
+                let path = rnsync::create_file_from_note(
                     &note,
                     &notebook_path,
                     args.format.clone(),
@@ -67,7 +67,7 @@ fn run(args: Vec<String>) -> Result<()> {
         for notebook in client.find_notebooks()? {
             let notebook_path = args
                 .path
-                .join(gnsync::escape_path_component(&notebook.name));
+                .join(rnsync::escape_path_component(&notebook.name));
             download_notebook(&mut client, Some(&notebook.name), &notebook_path, &args)?;
         }
         return Ok(());
@@ -98,7 +98,7 @@ fn download_notebook(
             client.get_note(&metadata.guid)?
         };
         let path =
-            gnsync::create_file_from_note(&note, path, args.format.clone(), &args.image_options)?;
+            rnsync::create_file_from_note(&note, path, args.format.clone(), &args.image_options)?;
         println!("{}", path.display());
     }
     Ok(())
@@ -212,7 +212,7 @@ fn auth_token(storage: &Storage) -> Result<String> {
 }
 
 fn help() -> String {
-    "Usage: gnsync [--path PATH] [--notebook NOTEBOOK] [--all] [--all-linked] [--mask MASK] [--format plain|markdown|html] [--count N] [--download-only] [--save-images] [--images-in-subdir]\n\nThis Rust gnsync currently downloads notes to local files only. It does not create, update, or delete Evernote notes.\n".to_string()
+    "Usage: rnsync [--path PATH] [--notebook NOTEBOOK] [--all] [--all-linked] [--mask MASK] [--format plain|markdown|html] [--count N] [--download-only] [--save-images] [--images-in-subdir]\n\nThis Rust rnsync currently downloads notes to local files only. It does not create, update, or delete Evernote notes.\n".to_string()
 }
 
 #[cfg(test)]
