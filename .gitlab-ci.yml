@@ -4,10 +4,12 @@ stages:
   - build
   - upload
   - release
+  - publish
 
 variables:
   CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
   RUST_IMAGE: rust:1.94-bookworm
+  MATURIN_IMAGE: ghcr.io/pyo3/maturin:v1.12.6
 
 cache:
   key: "$CI_JOB_NAME"
@@ -82,6 +84,42 @@ build:linux:arm64:
     RUST_TARGET: aarch64-unknown-linux-gnu
     ARTIFACT_NAME: reeknote-linux-aarch64
 
+.build-pypi-wheel:
+  stage: build
+  image:
+    name: "$MATURIN_IMAGE"
+    entrypoint: [""]
+  script:
+    - maturin build --release --locked --bindings bin --compatibility pypi --out dist
+  artifacts:
+    paths:
+      - dist/*.whl
+    expire_in: 1 week
+
+build:pypi:linux:x86_64:
+  extends: .build-pypi-wheel
+  tags:
+    - saas-linux-small-amd64
+
+build:pypi:linux:arm64:
+  extends: .build-pypi-wheel
+  tags:
+    - saas-linux-small-arm64
+
+build:pypi:sdist:
+  stage: build
+  image:
+    name: "$MATURIN_IMAGE"
+    entrypoint: [""]
+  tags:
+    - saas-linux-small-amd64
+  script:
+    - maturin sdist --out dist
+  artifacts:
+    paths:
+      - dist/*.tar.gz
+    expire_in: 1 week
+
 .release-tag-rules:
   rules:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/'
@@ -148,3 +186,25 @@ release:gitlab:
           url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote-linux-aarch64.tar.gz.sha256"
           filepath: "/reeknote-linux-aarch64.tar.gz.sha256"
           link_type: "package"
+
+publish:pypi:
+  stage: publish
+  image: python:3-bookworm
+  extends: .release-tag-rules
+  environment:
+    name: release
+  tags:
+    - saas-linux-small-amd64
+  needs:
+    - job: build:pypi:linux:x86_64
+      artifacts: true
+    - job: build:pypi:linux:arm64
+      artifacts: true
+    - job: build:pypi:sdist
+      artifacts: true
+  id_tokens:
+    PYPI_ID_TOKEN:
+      aud: pypi
+  script:
+    - python -m pip install --upgrade twine
+    - twine upload dist/*

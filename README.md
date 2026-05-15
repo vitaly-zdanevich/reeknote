@@ -69,6 +69,14 @@ For audio playback support, install `mpv` too:
 brew install mpv
 ```
 
+### Install With pipx
+
+Reeknote can be installed from PyPI with `pipx`:
+
+```sh
+pipx install reeknote
+```
+
 ### Uninstallation
 
 If installed with `cargo install --path .`:
@@ -102,7 +110,9 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * Clippy lints;
 * tests;
 * Linux x86_64 release builds;
-* Linux ARM64 release builds.
+* Linux ARM64 release builds;
+* Linux x86_64 and ARM64 PyPI wheel builds;
+* PyPI source distribution builds.
 
 Each build uploads a temporary artifact containing `reeknote`, `gnsync`, and
 a SHA-256 checksum. Version tag pipelines also upload those archives to the
@@ -110,6 +120,11 @@ GitLab Generic Package Registry and create a GitLab Release with durable
 download links.
 
 Released Linux binaries are available from the project's GitLab Releases page.
+
+Version tag pipelines publish PyPI wheels through PyPI Trusted Publishing. To
+enable the first publish, configure a PyPI pending publisher for project
+`reeknote` with namespace `vitaly-zdanevich`, project `reeknote`, workflow
+`.gitlab-ci.yml`, and environment `release`.
 
 The runner tags in `.gitlab-ci.yml` target GitLab.com hosted Linux runners. If
 this project uses self-managed or differently tagged runners, adjust the
