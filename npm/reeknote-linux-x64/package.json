@@ -1,0 +1,20 @@
+{
+  "name": "reeknote-linux-x64",
+  "version": "0.7.0",
+  "description": "Linux x64 binaries for Reeknote",
+  "license": "GPL-3.0-only",
+  "homepage": "https://gitlab.com/vitaly-zdanevich/reeknote",
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/vitaly-zdanevich/reeknote.git"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/"
+  ]
+}

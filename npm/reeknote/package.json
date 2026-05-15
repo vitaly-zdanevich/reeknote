@@ -1,0 +1,33 @@
+{
+  "name": "reeknote",
+  "version": "0.7.0",
+  "description": "Command-line Evernote client",
+  "license": "GPL-3.0-only",
+  "homepage": "https://gitlab.com/vitaly-zdanevich/reeknote",
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/vitaly-zdanevich/reeknote.git"
+  },
+  "keywords": [
+    "evernote",
+    "geeknote",
+    "notes",
+    "cli",
+    "sync"
+  ],
+  "bin": {
+    "reeknote": "bin/reeknote"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md"
+  ],
+  "optionalDependencies": {
+    "reeknote-linux-arm64": "0.7.0",
+    "reeknote-linux-x64": "0.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

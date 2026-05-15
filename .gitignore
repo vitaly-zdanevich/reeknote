@@ -1,2 +1,7 @@
 /target
 .codex
+/npm-dist
+/npm/reeknote-linux-arm64/bin/gnsync
+/npm/reeknote-linux-arm64/bin/reeknote
+/npm/reeknote-linux-x64/bin/gnsync
+/npm/reeknote-linux-x64/bin/reeknote

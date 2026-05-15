@@ -77,6 +77,16 @@ Reeknote can be installed from PyPI with `pipx`:
 pipx install reeknote
 ```
 
+### Install With npm
+
+Reeknote can be installed from npm:
+
+```sh
+npm install -g reeknote
+```
+
+The npm package currently provides Linux x64 and Linux ARM64 binaries.
+
 ### Uninstallation
 
 If installed with `cargo install --path .`:
@@ -112,7 +122,8 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * Linux x86_64 release builds;
 * Linux ARM64 release builds;
 * Linux x86_64 and ARM64 PyPI wheel builds;
-* PyPI source distribution builds.
+* PyPI source distribution builds;
+* npm package builds for Linux x64 and ARM64.
 
 Each build uploads a temporary artifact containing `reeknote`, `gnsync`, and
 a SHA-256 checksum. Version tag pipelines also upload those archives to the
@@ -125,6 +136,12 @@ Version tag pipelines publish PyPI wheels through PyPI Trusted Publishing. To
 enable the first publish, configure a PyPI pending publisher for project
 `reeknote` with namespace `vitaly-zdanevich`, project `reeknote`, workflow
 `.gitlab-ci.yml`, and environment `release`.
+
+Version tag pipelines publish npm packages through npm Trusted Publishing. To
+enable the first publish, configure npm trusted publishers for `reeknote`,
+`reeknote-linux-x64`, and `reeknote-linux-arm64` with namespace
+`vitaly-zdanevich`, project `reeknote`, CI file `.gitlab-ci.yml`, and
+environment `release`.
 
 The runner tags in `.gitlab-ci.yml` target GitLab.com hosted Linux runners. If
 this project uses self-managed or differently tagged runners, adjust the
