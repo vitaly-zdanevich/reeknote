@@ -80,6 +80,22 @@ For audio playback support, install `mpv` too:
 brew install mpv
 ```
 
+### Install With APT
+
+The GitLab Pages APT repository is intended for Debian 12, Ubuntu 24.04, and
+newer compatible distributions on `amd64` and `arm64`.
+
+```sh
+sudo apt install ca-certificates curl gnupg
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://vitaly-zdanevich.gitlab.io/reeknote/reeknote-archive-keyring.asc \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/reeknote.gpg
+echo "deb [signed-by=/etc/apt/keyrings/reeknote.gpg] https://vitaly-zdanevich.gitlab.io/reeknote stable main" \
+  | sudo tee /etc/apt/sources.list.d/reeknote.list >/dev/null
+sudo apt update
+sudo apt install reeknote
+```
+
 ### Install With pipx
 
 Reeknote and rnsync can be installed from PyPI with `pipx`:
@@ -134,8 +150,10 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * tests;
 * Linux x86_64 release builds;
 * Linux ARM64 release builds;
+* Debian package builds for `amd64` and `arm64`;
 * Linux x86_64 and ARM64 PyPI wheel builds for `reeknote` and `rnsync`;
 * npm package builds for `reeknote` and `rnsync` on Linux x64 and ARM64;
+* GitLab Pages APT repository publishing;
 * crates.io package publishing for the `reeknote` Cargo package.
 
 Each build uploads a temporary artifact containing `reeknote`, `rnsync`, and
@@ -144,6 +162,8 @@ GitLab Generic Package Registry and create a GitLab Release with durable
 download links.
 
 Released Linux binaries are available from the project's GitLab Releases page.
+Release pipelines also publish `.deb` packages as GitLab Release assets and
+update the GitLab Pages APT repository.
 
 Version tag pipelines publish PyPI wheels through PyPI Trusted Publishing. To
 enable the first publish, configure PyPI pending publishers for projects
@@ -161,6 +181,12 @@ Version tag pipelines publish the Rust crate to crates.io with `cargo publish`.
 Configure a protected masked GitLab CI variable named `CRATES_IO_TOKEN`
 containing a crates.io API token with publish rights for the `reeknote` crate.
 The crates.io package installs both `reeknote` and `rnsync`.
+
+Version tag pipelines publish the APT repository through GitLab Pages. Configure
+a protected GitLab CI variable named `APT_GPG_PRIVATE_KEY` containing the
+ASCII-armored private key used to sign the repository. A File-type variable is
+recommended; the CI accepts either a file variable path or the key text itself.
+If the key is protected with a passphrase, also configure `APT_GPG_PASSPHRASE`.
 
 The runner tags in `.gitlab-ci.yml` target GitLab.com hosted Linux runners. If
 this project uses self-managed or differently tagged runners, adjust the

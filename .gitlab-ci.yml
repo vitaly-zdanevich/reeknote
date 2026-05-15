@@ -237,6 +237,40 @@ package:npm:reeknote:
       - npm-dist/*.tgz
     expire_in: 1 week
 
+package:deb:amd64:
+  stage: package
+  image: debian:bookworm
+  extends: .release-tag-rules
+  tags:
+    - saas-linux-small-amd64
+  needs:
+    - job: build:linux:x86_64
+      artifacts: true
+  script:
+    - bash tools/build_deb.sh "$CI_COMMIT_TAG" amd64 reeknote-linux-x86_64.tar.gz deb-dist
+  artifacts:
+    paths:
+      - deb-dist/*.deb
+      - deb-dist/*.deb.sha256
+    expire_in: 1 week
+
+package:deb:arm64:
+  stage: package
+  image: debian:bookworm
+  extends: .release-tag-rules
+  tags:
+    - saas-linux-small-arm64
+  needs:
+    - job: build:linux:arm64
+      artifacts: true
+  script:
+    - bash tools/build_deb.sh "$CI_COMMIT_TAG" arm64 reeknote-linux-aarch64.tar.gz deb-dist
+  artifacts:
+    paths:
+      - deb-dist/*.deb
+      - deb-dist/*.deb.sha256
+    expire_in: 1 week
+
 .release-tag-rules:
   rules:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/'
@@ -255,6 +289,10 @@ upload:release-binaries:
       artifacts: true
     - job: build:linux:arm64
       artifacts: true
+    - job: package:deb:amd64
+      artifacts: true
+    - job: package:deb:arm64
+      artifacts: true
   script:
     - PACKAGE_REGISTRY_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/reeknote/${CI_COMMIT_TAG}"
     - |
@@ -262,12 +300,17 @@ upload:release-binaries:
         reeknote-linux-x86_64.tar.gz \
         reeknote-linux-x86_64.tar.gz.sha256 \
         reeknote-linux-aarch64.tar.gz \
-        reeknote-linux-aarch64.tar.gz.sha256
+        reeknote-linux-aarch64.tar.gz.sha256 \
+        "deb-dist/reeknote_${CI_COMMIT_TAG}_amd64.deb" \
+        "deb-dist/reeknote_${CI_COMMIT_TAG}_amd64.deb.sha256" \
+        "deb-dist/reeknote_${CI_COMMIT_TAG}_arm64.deb" \
+        "deb-dist/reeknote_${CI_COMMIT_TAG}_arm64.deb.sha256"
       do
+        filename="$(basename "$file")"
         curl --fail --show-error \
           --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
           --upload-file "$file" \
-          "${PACKAGE_REGISTRY_URL}/${file}"
+          "${PACKAGE_REGISTRY_URL}/${filename}"
       done
 
 release:gitlab:
@@ -303,6 +346,44 @@ release:gitlab:
           url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote-linux-aarch64.tar.gz.sha256"
           filepath: "/reeknote-linux-aarch64.tar.gz.sha256"
           link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_amd64.deb"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_amd64.deb"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_amd64.deb"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_amd64.deb.sha256"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_amd64.deb.sha256"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_amd64.deb.sha256"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_arm64.deb"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_arm64.deb"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_arm64.deb"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_arm64.deb.sha256"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_arm64.deb.sha256"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_arm64.deb.sha256"
+          link_type: "package"
+
+pages:
+  stage: publish
+  image: debian:bookworm
+  extends: .release-tag-rules
+  environment:
+    name: release
+  tags:
+    - saas-linux-small-amd64
+  needs:
+    - job: package:deb:amd64
+      artifacts: true
+    - job: package:deb:arm64
+      artifacts: true
+  script:
+    - apt-get update
+    - apt-get install --yes --no-install-recommends ca-certificates dpkg-dev gnupg gzip python3
+    - test -n "$APT_GPG_PRIVATE_KEY"
+    - bash tools/build_apt_repository.sh deb-dist public
+  artifacts:
+    paths:
+      - public
 
 publish:pypi:
   stage: publish
