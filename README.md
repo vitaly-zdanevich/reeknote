@@ -54,6 +54,21 @@ cargo install --path .
 This installs the `reeknote` and `gnsync` binaries into Cargo's binary
 directory, usually `~/.cargo/bin`.
 
+### Install With Homebrew
+
+Reeknote includes a Homebrew formula for installing from a tap:
+
+```sh
+brew tap vitaly-zdanevich/reeknote https://gitlab.com/vitaly-zdanevich/reeknote.git
+brew install reeknote
+```
+
+For audio playback support, install `mpv` too:
+
+```sh
+brew install mpv
+```
+
 ### Uninstallation
 
 If installed with `cargo install --path .`:
