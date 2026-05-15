@@ -14,6 +14,7 @@ variables:
   NODE_IMAGE: node:24-bookworm
   AUR_IMAGE: archlinux:base-devel
   FEDORA_IMAGE: fedora:latest
+  OPENSUSE_IMAGE: opensuse/tumbleweed:latest
   NIX_IMAGE: nixos/nix:latest
   NIX_CONFIG: "experimental-features = nix-command flakes"
 
@@ -318,6 +319,28 @@ package:rpm:aarch64:
       - rpm-dist/*.rpm.sha256
     expire_in: 1 week
 
+package:obs:opensuse:x86_64:
+  stage: package
+  image: "$OPENSUSE_IMAGE"
+  extends: .release-tag-rules
+  tags:
+    - saas-linux-small-amd64
+  script:
+    - zypper --non-interactive refresh
+    - zypper --non-interactive install ca-certificates cargo findutils gcc git gzip rpm-build rust tar
+    - test "$(grep -m1 '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')" = "$CI_COMMIT_TAG"
+    - bash tools/build_obs_package.sh "$CI_COMMIT_TAG" obs-dist build-rpm
+  artifacts:
+    paths:
+      - obs-dist/reeknote.spec
+      - obs-dist/reeknote-*.tar.gz
+      - obs-dist/reeknote-*.tar.gz.sha256
+      - obs-dist/vendor-*.tar.gz
+      - obs-dist/vendor-*.tar.gz.sha256
+      - obs-dist/*.rpm
+      - obs-dist/*.rpm.sha256
+    expire_in: 1 week
+
 .release-tag-rules:
   rules:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/'
@@ -586,3 +609,29 @@ publish:copr:
       fi
     - chmod 0600 "$HOME/.config/copr"
     - copr-cli build "${COPR_PROJECT:-reeknote}" "rpm-dist/reeknote_${CI_COMMIT_TAG}.src.rpm"
+
+publish:obs:
+  stage: publish
+  image: "$OPENSUSE_IMAGE"
+  environment:
+    name: release
+  tags:
+    - saas-linux-small-amd64
+  needs:
+    - job: package:obs:opensuse:x86_64
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/ && $OSC_CONFIG'
+    - when: never
+  script:
+    - zypper --non-interactive refresh
+    - zypper --non-interactive install osc
+    - mkdir -p "$HOME/.config/osc"
+    - |
+      if [ -f "$OSC_CONFIG" ]; then
+        cp "$OSC_CONFIG" "$HOME/.config/osc/oscrc"
+      else
+        printf '%s\n' "$OSC_CONFIG" > "$HOME/.config/osc/oscrc"
+      fi
+    - chmod 0600 "$HOME/.config/osc/oscrc"
+    - bash tools/publish_obs_package.sh "$CI_COMMIT_TAG" obs-dist

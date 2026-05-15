@@ -3,6 +3,7 @@
 /apt-dist
 /deb-dist
 /npm-dist
+/obs-dist
 /rpm-dist
 /result
 /npm/reeknote-linux-arm64/bin/gnsync

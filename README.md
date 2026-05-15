@@ -158,6 +158,22 @@ For audio playback and inline image display, install the optional tools too:
 sudo dnf install mpv kitty
 ```
 
+### Install With openSUSE OBS
+
+After the OBS project is published:
+
+```sh
+sudo zypper addrepo https://download.opensuse.org/repositories/home:/vitaly-zdanevich:/reeknote/openSUSE_Tumbleweed/home:vitaly-zdanevich:reeknote.repo
+sudo zypper refresh
+sudo zypper install reeknote
+```
+
+For audio playback and inline image display, install the optional tools too:
+
+```sh
+sudo zypper install mpv kitty
+```
+
 ### Install With pipx
 
 Reeknote and rnsync can be installed from PyPI with `pipx`:
@@ -215,11 +231,13 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * Linux ARM64 release builds;
 * Debian package builds for `amd64` and `arm64`;
 * Fedora RPM package builds for `x86_64` and `aarch64`;
+* openSUSE OBS package builds for Tumbleweed `x86_64`;
 * Linux x86_64 and ARM64 PyPI wheel builds for `reeknote` and `rnsync`;
 * npm package builds for `reeknote` and `rnsync` on Linux x64 and ARM64;
 * GitLab Pages APT repository publishing;
 * Arch Linux AUR package publishing;
 * Fedora Copr publishing when Copr credentials are configured;
+* openSUSE OBS publishing when osc credentials are configured;
 * crates.io package publishing for the `reeknote` Cargo package.
 
 Each build uploads a temporary artifact containing `reeknote`, `rnsync`, and
@@ -269,6 +287,14 @@ protected masked GitLab CI variable named `COPR_CONFIG` containing the
 accepts either a file variable path or the file text itself. The job builds the
 project named `reeknote` by default; set `COPR_PROJECT` if the Copr project name
 or owner-qualified project name is different, such as `user/reeknote`.
+
+Version tag pipelines publish the openSUSE source package to OBS when osc
+credentials are configured. Create the OBS project and package first, then
+configure a protected masked GitLab CI variable named `OSC_CONFIG` containing
+the `~/.config/osc/oscrc` credentials file. A File-type variable is recommended;
+the CI accepts either a file variable path or the file text itself. The job uses
+project `home:vitaly-zdanevich:reeknote` and package `reeknote` by default; set
+`OBS_PROJECT`, `OBS_PACKAGE`, or `OBS_APIURL` if your OBS project layout differs.
 
 The local Nix flake builds the same Rust package shape intended for a future
 Nixpkgs pull request. Nixpkgs publishing is not automatic from this repository;
