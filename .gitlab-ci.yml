@@ -13,6 +13,7 @@ variables:
   PYPI_BUILD_IMAGE: ghcr.io/pyo3/maturin:v1.12.6
   NODE_IMAGE: node:24-bookworm
   AUR_IMAGE: archlinux:base-devel
+  FEDORA_IMAGE: fedora:latest
   NIX_IMAGE: nixos/nix:latest
   NIX_CONFIG: "experimental-features = nix-command flakes"
 
@@ -285,6 +286,38 @@ package:deb:arm64:
       - deb-dist/*.deb.sha256
     expire_in: 1 week
 
+package:rpm:x86_64:
+  stage: package
+  image: "$FEDORA_IMAGE"
+  extends: .release-tag-rules
+  tags:
+    - saas-linux-small-amd64
+  script:
+    - dnf install --assumeyes cargo findutils git gzip rpm-build rust tar
+    - test "$(grep -m1 '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')" = "$CI_COMMIT_TAG"
+    - bash tools/build_rpm.sh "$CI_COMMIT_TAG" rpm-dist include-srpm
+  artifacts:
+    paths:
+      - rpm-dist/*.rpm
+      - rpm-dist/*.rpm.sha256
+    expire_in: 1 week
+
+package:rpm:aarch64:
+  stage: package
+  image: "$FEDORA_IMAGE"
+  extends: .release-tag-rules
+  tags:
+    - saas-linux-small-arm64
+  script:
+    - dnf install --assumeyes cargo findutils git gzip rpm-build rust tar
+    - test "$(grep -m1 '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')" = "$CI_COMMIT_TAG"
+    - bash tools/build_rpm.sh "$CI_COMMIT_TAG" rpm-dist binary-only
+  artifacts:
+    paths:
+      - rpm-dist/*.rpm
+      - rpm-dist/*.rpm.sha256
+    expire_in: 1 week
+
 .release-tag-rules:
   rules:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/'
@@ -307,6 +340,10 @@ upload:release-binaries:
       artifacts: true
     - job: package:deb:arm64
       artifacts: true
+    - job: package:rpm:x86_64
+      artifacts: true
+    - job: package:rpm:aarch64
+      artifacts: true
   script:
     - PACKAGE_REGISTRY_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/reeknote/${CI_COMMIT_TAG}"
     - |
@@ -318,7 +355,13 @@ upload:release-binaries:
         "deb-dist/reeknote_${CI_COMMIT_TAG}_amd64.deb" \
         "deb-dist/reeknote_${CI_COMMIT_TAG}_amd64.deb.sha256" \
         "deb-dist/reeknote_${CI_COMMIT_TAG}_arm64.deb" \
-        "deb-dist/reeknote_${CI_COMMIT_TAG}_arm64.deb.sha256"
+        "deb-dist/reeknote_${CI_COMMIT_TAG}_arm64.deb.sha256" \
+        "rpm-dist/reeknote_${CI_COMMIT_TAG}_x86_64.rpm" \
+        "rpm-dist/reeknote_${CI_COMMIT_TAG}_x86_64.rpm.sha256" \
+        "rpm-dist/reeknote_${CI_COMMIT_TAG}_aarch64.rpm" \
+        "rpm-dist/reeknote_${CI_COMMIT_TAG}_aarch64.rpm.sha256" \
+        "rpm-dist/reeknote_${CI_COMMIT_TAG}.src.rpm" \
+        "rpm-dist/reeknote_${CI_COMMIT_TAG}.src.rpm.sha256"
       do
         filename="$(basename "$file")"
         curl --fail --show-error \
@@ -375,6 +418,30 @@ release:gitlab:
         - name: "reeknote_${CI_COMMIT_TAG}_arm64.deb.sha256"
           url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_arm64.deb.sha256"
           filepath: "/reeknote_${CI_COMMIT_TAG}_arm64.deb.sha256"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_x86_64.rpm"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_x86_64.rpm"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_x86_64.rpm"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_x86_64.rpm.sha256"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_x86_64.rpm.sha256"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_x86_64.rpm.sha256"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_aarch64.rpm"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_aarch64.rpm"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_aarch64.rpm"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_aarch64.rpm.sha256"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_aarch64.rpm.sha256"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_aarch64.rpm.sha256"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}.src.rpm"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}.src.rpm"
+          filepath: "/reeknote_${CI_COMMIT_TAG}.src.rpm"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}.src.rpm.sha256"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}.src.rpm.sha256"
+          filepath: "/reeknote_${CI_COMMIT_TAG}.src.rpm.sha256"
           link_type: "package"
 
 pages:
@@ -494,3 +561,28 @@ publish:aur:
     - test "$(grep -m1 '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')" = "$CI_COMMIT_TAG"
     - test -n "$AUR_SSH_PRIVATE_KEY"
     - bash tools/update_aur_package.sh "$CI_COMMIT_TAG"
+
+publish:copr:
+  stage: publish
+  image: "$FEDORA_IMAGE"
+  environment:
+    name: release
+  tags:
+    - saas-linux-small-amd64
+  needs:
+    - job: package:rpm:x86_64
+      artifacts: true
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/ && $COPR_CONFIG'
+    - when: never
+  script:
+    - dnf install --assumeyes copr-cli
+    - mkdir -p "$HOME/.config"
+    - |
+      if [ -f "$COPR_CONFIG" ]; then
+        cp "$COPR_CONFIG" "$HOME/.config/copr"
+      else
+        printf '%s\n' "$COPR_CONFIG" > "$HOME/.config/copr"
+      fi
+    - chmod 0600 "$HOME/.config/copr"
+    - copr-cli build "${COPR_PROJECT:-reeknote}" "rpm-dist/reeknote_${CI_COMMIT_TAG}.src.rpm"

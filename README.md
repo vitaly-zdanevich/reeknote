@@ -142,6 +142,22 @@ For audio playback and inline image display, install the optional tools too:
 sudo pacman -S mpv kitty
 ```
 
+### Install With Fedora Copr
+
+After the Copr project is published:
+
+```sh
+sudo dnf install dnf-plugins-core
+sudo dnf copr enable vitaly-zdanevich/reeknote
+sudo dnf install reeknote
+```
+
+For audio playback and inline image display, install the optional tools too:
+
+```sh
+sudo dnf install mpv kitty
+```
+
 ### Install With pipx
 
 Reeknote and rnsync can be installed from PyPI with `pipx`:
@@ -198,10 +214,12 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * Linux x86_64 release builds;
 * Linux ARM64 release builds;
 * Debian package builds for `amd64` and `arm64`;
+* Fedora RPM package builds for `x86_64` and `aarch64`;
 * Linux x86_64 and ARM64 PyPI wheel builds for `reeknote` and `rnsync`;
 * npm package builds for `reeknote` and `rnsync` on Linux x64 and ARM64;
 * GitLab Pages APT repository publishing;
 * Arch Linux AUR package publishing;
+* Fedora Copr publishing when Copr credentials are configured;
 * crates.io package publishing for the `reeknote` Cargo package.
 
 Each build uploads a temporary artifact containing `reeknote`, `rnsync`, and
@@ -210,8 +228,8 @@ GitLab Generic Package Registry and create a GitLab Release with durable
 download links.
 
 Released Linux binaries are available from the project's GitLab Releases page.
-Release pipelines also publish `.deb` packages as GitLab Release assets and
-update the GitLab Pages APT repository.
+Release pipelines also publish `.deb`, `.rpm`, and `.src.rpm` packages as
+GitLab Release assets and update the GitLab Pages APT repository.
 
 Version tag pipelines publish PyPI wheels through PyPI Trusted Publishing. To
 enable the first publish, configure PyPI pending publishers for projects
@@ -243,6 +261,14 @@ registered in the AUR account. A File-type variable is recommended; the CI
 accepts either a file variable path or the key text itself. The first successful
 push creates the AUR package if it does not already exist. Optionally configure
 `AUR_SSH_KNOWN_HOSTS` to pin the AUR SSH host key instead of using `ssh-keyscan`.
+
+Version tag pipelines publish the Fedora source RPM to Copr when Copr
+credentials are configured. Create the Copr project first, then configure a
+protected masked GitLab CI variable named `COPR_CONFIG` containing the
+`~/.config/copr` credentials file. A File-type variable is recommended; the CI
+accepts either a file variable path or the file text itself. The job builds the
+project named `reeknote` by default; set `COPR_PROJECT` if the Copr project name
+or owner-qualified project name is different, such as `user/reeknote`.
 
 The local Nix flake builds the same Rust package shape intended for a future
 Nixpkgs pull request. Nixpkgs publishing is not automatic from this repository;

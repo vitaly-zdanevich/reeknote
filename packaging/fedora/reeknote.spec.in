@@ -1,0 +1,53 @@
+Name:           reeknote
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Command-line Evernote client
+
+License:        GPL-3.0-only
+URL:            https://gitlab.com/vitaly-zdanevich/reeknote
+Source0:        %{name}-%{version}.tar.gz
+Source1:        vendor-%{version}.tar.gz
+
+BuildRequires:  cargo
+BuildRequires:  gcc
+BuildRequires:  rust
+BuildRequires:  tar
+Requires:       ca-certificates
+Recommends:     mpv
+Suggests:       kitty
+
+%description
+Reeknote is a command-line client for Evernote. It includes rnsync for
+downloading Evernote notes to local files.
+
+%prep
+%autosetup -n %{name}-%{version}
+tar -xzf %{SOURCE1}
+mkdir -p .cargo
+cat > .cargo/config.toml <<'EOF'
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"
+EOF
+
+%build
+cargo build --frozen --release --bins
+
+%check
+cargo test --frozen
+
+%install
+install -Dm0755 target/release/reeknote %{buildroot}%{_bindir}/reeknote
+install -Dm0755 target/release/rnsync %{buildroot}%{_bindir}/rnsync
+
+%files
+%license LICENSE
+%doc README.md
+%{_bindir}/reeknote
+%{_bindir}/rnsync
+
+%changelog
+* Fri May 15 2026 Vitaly Zdanevich <zdanevich.vitaly@ya.ru> - @VERSION@-1
+- Package Reeknote for Fedora and Copr.
