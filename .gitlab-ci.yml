@@ -12,6 +12,7 @@ variables:
   RUST_IMAGE: rust:1.94-bookworm
   PYPI_BUILD_IMAGE: ghcr.io/pyo3/maturin:v1.12.6
   NODE_IMAGE: node:24-bookworm
+  AUR_IMAGE: archlinux:base-devel
 
 cache:
   key: "$CI_JOB_NAME"
@@ -465,3 +466,18 @@ publish:crates:
     - test -n "$CRATES_IO_TOKEN"
     - cargo publish --locked --dry-run
     - CARGO_REGISTRY_TOKEN="$CRATES_IO_TOKEN" cargo publish --locked
+
+publish:aur:
+  stage: publish
+  image: "$AUR_IMAGE"
+  extends: .release-tag-rules
+  environment:
+    name: release
+  tags:
+    - saas-linux-small-amd64
+  needs: []
+  script:
+    - pacman -Syu --noconfirm --needed curl git openssh
+    - test "$(grep -m1 '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')" = "$CI_COMMIT_TAG"
+    - test -n "$AUR_SSH_PRIVATE_KEY"
+    - bash tools/update_aur_package.sh "$CI_COMMIT_TAG"

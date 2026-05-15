@@ -96,6 +96,31 @@ sudo apt update
 sudo apt install reeknote
 ```
 
+### Install on Arch Linux
+
+Reeknote is packaged for Arch Linux through the AUR. With an AUR helper:
+
+```sh
+yay -S reeknote
+# Or:
+paru -S reeknote
+```
+
+To install manually with `makepkg`, first install the usual AUR build tools:
+
+```sh
+sudo pacman -S --needed base-devel git
+git clone https://aur.archlinux.org/reeknote.git
+cd reeknote
+makepkg -si
+```
+
+For audio playback and inline image display, install the optional tools too:
+
+```sh
+sudo pacman -S mpv kitty
+```
+
 ### Install With pipx
 
 Reeknote and rnsync can be installed from PyPI with `pipx`:
@@ -154,6 +179,7 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * Linux x86_64 and ARM64 PyPI wheel builds for `reeknote` and `rnsync`;
 * npm package builds for `reeknote` and `rnsync` on Linux x64 and ARM64;
 * GitLab Pages APT repository publishing;
+* Arch Linux AUR package publishing;
 * crates.io package publishing for the `reeknote` Cargo package.
 
 Each build uploads a temporary artifact containing `reeknote`, `rnsync`, and
@@ -187,6 +213,14 @@ a protected GitLab CI variable named `APT_GPG_PRIVATE_KEY` containing the
 ASCII-armored private key used to sign the repository. A File-type variable is
 recommended; the CI accepts either a file variable path or the key text itself.
 If the key is protected with a passphrase, also configure `APT_GPG_PASSPHRASE`.
+
+Version tag pipelines publish the Arch Linux AUR package by updating the AUR
+Git repository for `reeknote`. Configure a protected masked GitLab CI variable
+named `AUR_SSH_PRIVATE_KEY` containing a private SSH key whose public key is
+registered in the AUR account. A File-type variable is recommended; the CI
+accepts either a file variable path or the key text itself. The first successful
+push creates the AUR package if it does not already exist. Optionally configure
+`AUR_SSH_KNOWN_HOSTS` to pin the AUR SSH host key instead of using `ssh-keyscan`.
 
 The runner tags in `.gitlab-ci.yml` target GitLab.com hosted Linux runners. If
 this project uses self-managed or differently tagged runners, adjust the

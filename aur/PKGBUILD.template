@@ -1,0 +1,44 @@
+# Maintainer: Vitaly Zdanevich <zdanevich dot vitaly at ya dot ru>
+
+pkgname=reeknote
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Command-line Evernote client'
+arch=('x86_64' 'aarch64')
+url='https://gitlab.com/vitaly-zdanevich/reeknote'
+license=('GPL-3.0-only')
+depends=('ca-certificates' 'gcc-libs' 'glibc')
+makedepends=('cargo')
+optdepends=(
+  'kitty: show image attachments inline'
+  'mpv: play audio attachments'
+)
+source=("$pkgname-$pkgver.tar.gz::@SOURCE_URL@")
+sha256sums=('@SHA256@')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release --bins --target "$CARCH-unknown-linux-gnu"
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  export CARGO_TARGET_DIR=target
+  cargo test --frozen --target "$CARCH-unknown-linux-gnu"
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  local target="target/$CARCH-unknown-linux-gnu/release"
+
+  install -Dm755 "$target/reeknote" "$pkgdir/usr/bin/reeknote"
+  install -Dm755 "$target/rnsync" "$pkgdir/usr/bin/rnsync"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
