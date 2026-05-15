@@ -13,6 +13,8 @@ variables:
   PYPI_BUILD_IMAGE: ghcr.io/pyo3/maturin:v1.12.6
   NODE_IMAGE: node:24-bookworm
   AUR_IMAGE: archlinux:base-devel
+  NIX_IMAGE: nixos/nix:latest
+  NIX_CONFIG: "experimental-features = nix-command flakes"
 
 cache:
   key: "$CI_JOB_NAME"
@@ -52,6 +54,17 @@ clippy:
   script:
     - rustup component add clippy
     - cargo clippy --locked --all-targets --all-features -- -D warnings
+
+nix:build:
+  stage: build
+  image: "$NIX_IMAGE"
+  tags:
+    - saas-linux-small-amd64
+  script:
+    - nix --version
+    - nix flake check --no-update-lock-file --print-build-logs
+    - nix build .#reeknote --no-update-lock-file --print-build-logs
+    - ./result/bin/reeknote >/dev/null
 
 .build-linux:
   extends: .rust-linux

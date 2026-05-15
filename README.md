@@ -65,6 +65,27 @@ cargo install --path .
 This installs the local checkout's `reeknote` and `rnsync` binaries into
 Cargo's binary directory, usually `~/.cargo/bin`.
 
+### Install With Nix
+
+From this repository:
+
+```sh
+nix profile install .#reeknote
+```
+
+To run without installing:
+
+```sh
+nix run .#reeknote
+nix run .#rnsync -- --help
+```
+
+After Reeknote is accepted into Nixpkgs, install it from Nixpkgs:
+
+```sh
+nix profile install nixpkgs#reeknote
+```
+
 ### Install With Homebrew
 
 Reeknote includes a Homebrew formula for installing from a tap:
@@ -172,6 +193,7 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 
 * formatting checks;
 * Clippy lints;
+* Nix flake package builds;
 * tests;
 * Linux x86_64 release builds;
 * Linux ARM64 release builds;
@@ -221,6 +243,10 @@ registered in the AUR account. A File-type variable is recommended; the CI
 accepts either a file variable path or the key text itself. The first successful
 push creates the AUR package if it does not already exist. Optionally configure
 `AUR_SSH_KNOWN_HOSTS` to pin the AUR SSH host key instead of using `ssh-keyscan`.
+
+The local Nix flake builds the same Rust package shape intended for a future
+Nixpkgs pull request. Nixpkgs publishing is not automatic from this repository;
+it still requires a reviewed pull request to `NixOS/nixpkgs`.
 
 The runner tags in `.gitlab-ci.yml` target GitLab.com hosted Linux runners. If
 this project uses self-managed or differently tagged runners, adjust the
