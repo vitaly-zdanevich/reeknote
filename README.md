@@ -104,7 +104,12 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * Linux x86_64 release builds;
 * Linux ARM64 release builds.
 
-Each build uploads an artifact containing `reeknote` and `gnsync`.
+Each build uploads a temporary artifact containing `reeknote`, `gnsync`, and
+a SHA-256 checksum. Version tag pipelines also upload those archives to the
+GitLab Generic Package Registry and create a GitLab Release with durable
+download links.
+
+Released Linux binaries are available from the project's GitLab Releases page.
 
 The runner tags in `.gitlab-ci.yml` target GitLab.com hosted Linux runners. If
 this project uses self-managed or differently tagged runners, adjust the
