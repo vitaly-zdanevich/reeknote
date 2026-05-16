@@ -1,0 +1,5 @@
+Reeknote is a command-line Evernote client. It can create, edit, search,
+and show Evernote notes from a terminal.
+
+The package also installs rnsync, a companion command for downloading
+Evernote notes to local files.

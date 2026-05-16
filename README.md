@@ -129,6 +129,11 @@ sudo snap install rnsync --classic
 Classic confinement is used because Reeknote can launch local editors and `mpv`,
 and rnsync writes notes to user-selected paths.
 
+### FreeBSD Port Draft
+
+A draft FreeBSD port lives in `packaging/freebsd`. It is not submitted to the
+FreeBSD ports tree yet and must be validated on FreeBSD before submission.
+
 ### Install on Arch Linux
 
 Reeknote is packaged for Arch Linux through the AUR. With an AUR helper:

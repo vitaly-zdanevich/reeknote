@@ -1,0 +1,12 @@
+[
+{ type: install
+  message: <<EOM
+Reeknote can use optional local tools:
+
+  * multimedia/mpv to play audio attachments
+  * x11/kitty to show image attachments inline in Kitty terminal
+
+Install them separately if you need those features.
+EOM
+}
+]
