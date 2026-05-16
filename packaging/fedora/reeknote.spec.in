@@ -10,6 +10,7 @@ Source1:        vendor-%{version}.tar.gz
 
 BuildRequires:  cargo
 BuildRequires:  gcc
+BuildRequires:  gzip
 BuildRequires:  rust
 BuildRequires:  tar
 Requires:       ca-certificates

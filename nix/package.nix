@@ -14,12 +14,16 @@ rustPlatform.buildRustPackage rec {
       let
         name = baseNameOf path;
       in
-      !(type == "directory" && builtins.elem name [
+      !(builtins.elem name [
         ".cargo"
+        ".codex"
         ".git"
         "apt-dist"
         "deb-dist"
         "npm-dist"
+        "obs-dist"
+        "result"
+        "rpm-dist"
         "target"
       ]);
   };

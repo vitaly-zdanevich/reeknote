@@ -354,19 +354,13 @@ upload:release-binaries:
   extends: .release-tag-rules
   tags:
     - saas-linux-small-amd64
-  needs:
-    - job: build:linux:x86_64
-      artifacts: true
-    - job: build:linux:arm64
-      artifacts: true
-    - job: package:deb:amd64
-      artifacts: true
-    - job: package:deb:arm64
-      artifacts: true
-    - job: package:rpm:x86_64
-      artifacts: true
-    - job: package:rpm:aarch64
-      artifacts: true
+  dependencies:
+    - build:linux:x86_64
+    - build:linux:arm64
+    - package:deb:amd64
+    - package:deb:arm64
+    - package:rpm:x86_64
+    - package:rpm:aarch64
   script:
     - PACKAGE_REGISTRY_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/reeknote/${CI_COMMIT_TAG}"
     - |
@@ -399,9 +393,7 @@ release:gitlab:
   extends: .release-tag-rules
   tags:
     - saas-linux-small-amd64
-  needs:
-    - job: upload:release-binaries
-      artifacts: false
+  dependencies: []
   script:
     - echo "Creating GitLab release for ${CI_COMMIT_TAG}"
   release:
@@ -475,11 +467,9 @@ pages:
     name: release
   tags:
     - saas-linux-small-amd64
-  needs:
-    - job: package:deb:amd64
-      artifacts: true
-    - job: package:deb:arm64
-      artifacts: true
+  dependencies:
+    - package:deb:amd64
+    - package:deb:arm64
   script:
     - apt-get update
     - apt-get install --yes --no-install-recommends ca-certificates dpkg-dev gnupg gzip python3
@@ -497,20 +487,17 @@ publish:pypi:
     name: release
   tags:
     - saas-linux-small-amd64
-  needs:
-    - job: build:pypi:reeknote:linux:x86_64
-      artifacts: true
-    - job: build:pypi:reeknote:linux:arm64
-      artifacts: true
-    - job: build:pypi:rnsync:linux:x86_64
-      artifacts: true
-    - job: build:pypi:rnsync:linux:arm64
-      artifacts: true
+  dependencies:
+    - build:pypi:reeknote:linux:x86_64
+    - build:pypi:reeknote:linux:arm64
+    - build:pypi:rnsync:linux:x86_64
+    - build:pypi:rnsync:linux:arm64
   id_tokens:
     PYPI_ID_TOKEN:
       aud: pypi
   script:
     - python -m pip install --upgrade twine
+    - twine check dist/*
     - twine upload dist/*
 
 publish:npm:
@@ -521,19 +508,13 @@ publish:npm:
     name: release
   tags:
     - saas-linux-small-amd64
-  needs:
-    - job: package:npm:reeknote:linux:x64
-      artifacts: true
-    - job: package:npm:reeknote:linux:arm64
-      artifacts: true
-    - job: package:npm:reeknote
-      artifacts: true
-    - job: package:npm:rnsync:linux:x64
-      artifacts: true
-    - job: package:npm:rnsync:linux:arm64
-      artifacts: true
-    - job: package:npm:rnsync
-      artifacts: true
+  dependencies:
+    - package:npm:reeknote:linux:x64
+    - package:npm:reeknote:linux:arm64
+    - package:npm:reeknote
+    - package:npm:rnsync:linux:x64
+    - package:npm:rnsync:linux:arm64
+    - package:npm:rnsync
   id_tokens:
     NPM_ID_TOKEN:
       aud: "npm:registry.npmjs.org"
@@ -563,7 +544,7 @@ publish:crates:
     name: release
   tags:
     - saas-linux-small-amd64
-  needs: []
+  dependencies: []
   script:
     - test "$(cargo pkgid | sed 's/.*@//')" = "$CI_COMMIT_TAG"
     - test -n "$CRATES_IO_TOKEN"
@@ -578,7 +559,7 @@ publish:aur:
     name: release
   tags:
     - saas-linux-small-amd64
-  needs: []
+  dependencies: []
   script:
     - pacman -Syu --noconfirm --needed curl git openssh
     - test "$(grep -m1 '^version =' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')" = "$CI_COMMIT_TAG"
@@ -592,9 +573,8 @@ publish:copr:
     name: release
   tags:
     - saas-linux-small-amd64
-  needs:
-    - job: package:rpm:x86_64
-      artifacts: true
+  dependencies:
+    - package:rpm:x86_64
   rules:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/ && $COPR_CONFIG'
     - when: never
@@ -617,9 +597,8 @@ publish:obs:
     name: release
   tags:
     - saas-linux-small-amd64
-  needs:
-    - job: package:obs:opensuse:x86_64
-      artifacts: true
+  dependencies:
+    - package:obs:opensuse:x86_64
   rules:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/ && $OSC_CONFIG'
     - when: never
