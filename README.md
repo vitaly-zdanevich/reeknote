@@ -117,6 +117,18 @@ sudo apt update
 sudo apt install reeknote
 ```
 
+### Install With Snap
+
+Reeknote and rnsync are published as separate classic-confinement snaps:
+
+```sh
+sudo snap install reeknote --classic
+sudo snap install rnsync --classic
+```
+
+Classic confinement is used because Reeknote can launch local editors and `mpv`,
+and rnsync writes notes to user-selected paths.
+
 ### Install on Arch Linux
 
 Reeknote is packaged for Arch Linux through the AUR. With an AUR helper:
@@ -232,12 +244,14 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * Debian package builds for `amd64` and `arm64`;
 * Fedora RPM package builds for `x86_64` and `aarch64`;
 * openSUSE OBS package builds for Tumbleweed `x86_64`;
+* Snap package builds for `reeknote` and `rnsync` on `amd64` and `arm64`;
 * Linux x86_64 and ARM64 PyPI wheel builds for `reeknote` and `rnsync`;
 * npm package builds for `reeknote` and `rnsync` on Linux x64 and ARM64;
 * GitLab Pages APT repository publishing;
 * Arch Linux AUR package publishing;
 * Fedora Copr publishing when Copr credentials are configured;
 * openSUSE OBS publishing when osc credentials are configured;
+* Snap Store publishing when Snapcraft credentials are configured;
 * crates.io package publishing for the `reeknote` Cargo package.
 
 Each build uploads a temporary artifact containing `reeknote`, `rnsync`, and
@@ -246,8 +260,8 @@ GitLab Generic Package Registry and create a GitLab Release with durable
 download links.
 
 Released Linux binaries are available from the project's GitLab Releases page.
-Release pipelines also publish `.deb`, `.rpm`, and `.src.rpm` packages as
-GitLab Release assets and update the GitLab Pages APT repository.
+Release pipelines also publish `.deb`, `.rpm`, `.src.rpm`, and `.snap` packages
+as GitLab Release assets and update the GitLab Pages APT repository.
 
 Version tag pipelines publish PyPI wheels through PyPI Trusted Publishing. To
 enable the first publish, configure PyPI pending publishers for projects
@@ -295,6 +309,24 @@ the `~/.config/osc/oscrc` credentials file. A File-type variable is recommended;
 the CI accepts either a file variable path or the file text itself. The job uses
 project `home:vitaly-zdanevich:reeknote` and package `reeknote` by default; set
 `OBS_PROJECT`, `OBS_PACKAGE`, or `OBS_APIURL` if your OBS project layout differs.
+
+Version tag pipelines publish separate `reeknote` and `rnsync` snaps to the Snap
+Store when Snapcraft credentials are configured. Register both snap names first,
+then configure a protected masked GitLab CI variable named
+`SNAPCRAFT_STORE_CREDENTIALS` containing credentials from `snapcraft
+export-login`. A File-type variable is recommended; the CI accepts either a file
+variable path or the credentials text itself. The job publishes to `stable` by
+default; set `SNAPCRAFT_CHANNEL` to publish to another channel. Because these
+snaps use classic confinement, the first store release requires Snap Store
+classic-confinement approval.
+
+```sh
+snapcraft export-login \
+  --snaps=reeknote,rnsync \
+  --acls=package_access,package_push,package_update,package_release \
+  --channels=stable \
+  snapcraft-login
+```
 
 The local Nix flake builds the same Rust package shape intended for a future
 Nixpkgs pull request. Nixpkgs publishing is not automatic from this repository;

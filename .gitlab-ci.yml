@@ -15,6 +15,7 @@ variables:
   AUR_IMAGE: archlinux:base-devel
   FEDORA_IMAGE: fedora:latest
   OPENSUSE_IMAGE: opensuse/tumbleweed:latest
+  SNAPCRAFT_IMAGE: canonical/snapcraft:8_core24
   NIX_IMAGE: nixos/nix:latest
   NIX_CONFIG: "experimental-features = nix-command flakes"
 
@@ -341,6 +342,70 @@ package:obs:opensuse:x86_64:
       - obs-dist/*.rpm.sha256
     expire_in: 1 week
 
+package:snap:reeknote:amd64:
+  stage: package
+  image: "$SNAPCRAFT_IMAGE"
+  extends: .release-tag-rules
+  tags:
+    - saas-linux-small-amd64
+  dependencies:
+    - build:linux:x86_64
+  script:
+    - bash tools/build_snap.sh "$CI_COMMIT_TAG" reeknote amd64 reeknote-linux-x86_64.tar.gz snap-dist
+  artifacts:
+    paths:
+      - snap-dist/reeknote_*.snap
+      - snap-dist/reeknote_*.snap.sha256
+    expire_in: 1 week
+
+package:snap:reeknote:arm64:
+  stage: package
+  image: "$SNAPCRAFT_IMAGE"
+  extends: .release-tag-rules
+  tags:
+    - saas-linux-small-arm64
+  dependencies:
+    - build:linux:arm64
+  script:
+    - bash tools/build_snap.sh "$CI_COMMIT_TAG" reeknote arm64 reeknote-linux-aarch64.tar.gz snap-dist
+  artifacts:
+    paths:
+      - snap-dist/reeknote_*.snap
+      - snap-dist/reeknote_*.snap.sha256
+    expire_in: 1 week
+
+package:snap:rnsync:amd64:
+  stage: package
+  image: "$SNAPCRAFT_IMAGE"
+  extends: .release-tag-rules
+  tags:
+    - saas-linux-small-amd64
+  dependencies:
+    - build:linux:x86_64
+  script:
+    - bash tools/build_snap.sh "$CI_COMMIT_TAG" rnsync amd64 reeknote-linux-x86_64.tar.gz snap-dist
+  artifacts:
+    paths:
+      - snap-dist/rnsync_*.snap
+      - snap-dist/rnsync_*.snap.sha256
+    expire_in: 1 week
+
+package:snap:rnsync:arm64:
+  stage: package
+  image: "$SNAPCRAFT_IMAGE"
+  extends: .release-tag-rules
+  tags:
+    - saas-linux-small-arm64
+  dependencies:
+    - build:linux:arm64
+  script:
+    - bash tools/build_snap.sh "$CI_COMMIT_TAG" rnsync arm64 reeknote-linux-aarch64.tar.gz snap-dist
+  artifacts:
+    paths:
+      - snap-dist/rnsync_*.snap
+      - snap-dist/rnsync_*.snap.sha256
+    expire_in: 1 week
+
 .release-tag-rules:
   rules:
     - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/'
@@ -361,6 +426,10 @@ upload:release-binaries:
     - package:deb:arm64
     - package:rpm:x86_64
     - package:rpm:aarch64
+    - package:snap:reeknote:amd64
+    - package:snap:reeknote:arm64
+    - package:snap:rnsync:amd64
+    - package:snap:rnsync:arm64
   script:
     - PACKAGE_REGISTRY_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/reeknote/${CI_COMMIT_TAG}"
     - |
@@ -378,7 +447,15 @@ upload:release-binaries:
         "rpm-dist/reeknote_${CI_COMMIT_TAG}_aarch64.rpm" \
         "rpm-dist/reeknote_${CI_COMMIT_TAG}_aarch64.rpm.sha256" \
         "rpm-dist/reeknote_${CI_COMMIT_TAG}.src.rpm" \
-        "rpm-dist/reeknote_${CI_COMMIT_TAG}.src.rpm.sha256"
+        "rpm-dist/reeknote_${CI_COMMIT_TAG}.src.rpm.sha256" \
+        "snap-dist/reeknote_${CI_COMMIT_TAG}_amd64.snap" \
+        "snap-dist/reeknote_${CI_COMMIT_TAG}_amd64.snap.sha256" \
+        "snap-dist/reeknote_${CI_COMMIT_TAG}_arm64.snap" \
+        "snap-dist/reeknote_${CI_COMMIT_TAG}_arm64.snap.sha256" \
+        "snap-dist/rnsync_${CI_COMMIT_TAG}_amd64.snap" \
+        "snap-dist/rnsync_${CI_COMMIT_TAG}_amd64.snap.sha256" \
+        "snap-dist/rnsync_${CI_COMMIT_TAG}_arm64.snap" \
+        "snap-dist/rnsync_${CI_COMMIT_TAG}_arm64.snap.sha256"
       do
         filename="$(basename "$file")"
         curl --fail --show-error \
@@ -457,6 +534,38 @@ release:gitlab:
         - name: "reeknote_${CI_COMMIT_TAG}.src.rpm.sha256"
           url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}.src.rpm.sha256"
           filepath: "/reeknote_${CI_COMMIT_TAG}.src.rpm.sha256"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_amd64.snap"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_amd64.snap"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_amd64.snap"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_amd64.snap.sha256"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_amd64.snap.sha256"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_amd64.snap.sha256"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_arm64.snap"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_arm64.snap"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_arm64.snap"
+          link_type: "package"
+        - name: "reeknote_${CI_COMMIT_TAG}_arm64.snap.sha256"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/reeknote_${CI_COMMIT_TAG}_arm64.snap.sha256"
+          filepath: "/reeknote_${CI_COMMIT_TAG}_arm64.snap.sha256"
+          link_type: "package"
+        - name: "rnsync_${CI_COMMIT_TAG}_amd64.snap"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/rnsync_${CI_COMMIT_TAG}_amd64.snap"
+          filepath: "/rnsync_${CI_COMMIT_TAG}_amd64.snap"
+          link_type: "package"
+        - name: "rnsync_${CI_COMMIT_TAG}_amd64.snap.sha256"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/rnsync_${CI_COMMIT_TAG}_amd64.snap.sha256"
+          filepath: "/rnsync_${CI_COMMIT_TAG}_amd64.snap.sha256"
+          link_type: "package"
+        - name: "rnsync_${CI_COMMIT_TAG}_arm64.snap"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/rnsync_${CI_COMMIT_TAG}_arm64.snap"
+          filepath: "/rnsync_${CI_COMMIT_TAG}_arm64.snap"
+          link_type: "package"
+        - name: "rnsync_${CI_COMMIT_TAG}_arm64.snap.sha256"
+          url: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/reeknote/$CI_COMMIT_TAG/rnsync_${CI_COMMIT_TAG}_arm64.snap.sha256"
+          filepath: "/rnsync_${CI_COMMIT_TAG}_arm64.snap.sha256"
           link_type: "package"
 
 pages:
@@ -614,3 +723,35 @@ publish:obs:
       fi
     - chmod 0600 "$HOME/.config/osc/oscrc"
     - bash tools/publish_obs_package.sh "$CI_COMMIT_TAG" obs-dist
+
+publish:snap:reeknote:
+  stage: publish
+  image: "$SNAPCRAFT_IMAGE"
+  environment:
+    name: release
+  tags:
+    - saas-linux-small-amd64
+  dependencies:
+    - package:snap:reeknote:amd64
+    - package:snap:reeknote:arm64
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/ && $SNAPCRAFT_STORE_CREDENTIALS'
+    - when: never
+  script:
+    - bash tools/publish_snap_package.sh reeknote snap-dist "${SNAPCRAFT_CHANNEL:-stable}"
+
+publish:snap:rnsync:
+  stage: publish
+  image: "$SNAPCRAFT_IMAGE"
+  environment:
+    name: release
+  tags:
+    - saas-linux-small-amd64
+  dependencies:
+    - package:snap:rnsync:amd64
+    - package:snap:rnsync:arm64
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^\d+\.\d+\.\d+$/ && $SNAPCRAFT_STORE_CREDENTIALS'
+    - when: never
+  script:
+    - bash tools/publish_snap_package.sh rnsync snap-dist "${SNAPCRAFT_CHANNEL:-stable}"

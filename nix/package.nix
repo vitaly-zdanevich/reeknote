@@ -24,6 +24,7 @@ rustPlatform.buildRustPackage rec {
         "obs-dist"
         "result"
         "rpm-dist"
+        "snap-dist"
         "target"
       ]);
   };
