@@ -953,3 +953,4 @@ rnsync --path ~/evernote-backup --all --format html --save-images --images-in-su
 
 * [NixNote: GUI, storing notes in SQLite, written in C++](https://github.com/robert7/nixnote2)
 * [CLInote: CLI, written in Go](https://github.com/TcM1911/clinote)
+* [Telegram self-hosted bot, read-only](https://gitlab.com/vitaly-zdanevich/bot_telegram_evernote)
