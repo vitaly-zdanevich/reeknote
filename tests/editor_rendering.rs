@@ -104,6 +104,15 @@ fn converts_div_blocks_to_paragraphs() {
 }
 
 #[test]
+fn renders_horizontal_rules_as_text_separators() {
+    let html = "<div>Before</div><hr/><div>After</div>";
+    assert_eq!(
+        enml_to_text(&wrap_enml(html)),
+        "Before\n\n------------------------\n\nAfter\n\n"
+    );
+}
+
+#[test]
 fn escapes_markdown_html() {
     assert_eq!(
         text_to_enml("<what ever>"),

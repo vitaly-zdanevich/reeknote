@@ -15,6 +15,8 @@ pub enum TextFormat {
     Pre,
 }
 
+const HORIZONTAL_RULE: &str = "------------------------";
+
 impl TextFormat {
     pub fn from_extension(extension: &str) -> Option<Self> {
         match extension {
@@ -174,6 +176,7 @@ fn enml_to_text_internal(
         .replace("<br/>", "\n")
         .replace("<br />", "\n")
         .replace("<br>", "\n");
+    body = replace_horizontal_rules(&body);
     body = strip_tags(&body);
     normalize_blank_lines(&html_unescape(&body))
 }
@@ -656,6 +659,11 @@ fn replace_divs(content: &str) -> String {
 
 fn is_compact_div_text(text: &str) -> bool {
     text.starts_with("* [ ]") || text.starts_with("* [x]")
+}
+
+fn replace_horizontal_rules(content: &str) -> String {
+    let separator = format!("\n{HORIZONTAL_RULE}\n\n");
+    content.replace("<hr/>", &separator)
 }
 
 fn replace_code_blocks(content: &str, highlight_code: bool) -> String {
