@@ -951,6 +951,6 @@ rnsync --path ~/evernote-backup --all --format html --save-images --images-in-su
 
 ## Evernote Related Projects Worth Mentioning
 
-* [NixNote: GUI, storing notes in SQLite, written in C++](https://github.com/robert7/nixnote2)
+* [NixNote: GUI, storing notes in SQLite, written in C++](https://github.com/vitaly-zdanevich/nixnote2)
 * [CLInote: CLI, written in Go](https://github.com/TcM1911/clinote)
 * [Telegram self-hosted bot, read-only](https://gitlab.com/vitaly-zdanevich/bot_telegram_evernote)
