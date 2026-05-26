@@ -177,7 +177,7 @@ fn renders_images_for_kitty_terminal_output() {
     resource.data.size = resource.data.body.len();
     let text = enml_to_terminal_text_with_options(&note, &[resource], true);
     assert!(text.contains("\x1b_Ga=T,t=f,f=100,q=2;"));
-    assert!(text.contains("\x1b\\photo.png\n\n"));
+    assert!(text.contains("\x1b\\\n\x1b[3mphoto.png\x1b[0m\n\n"));
     assert!(!text.contains("[Image:"));
 }
 
@@ -189,7 +189,7 @@ fn renders_webp_images_even_when_evernote_labels_them_png() {
     resource.data.size = resource.data.body.len();
     let text = enml_to_terminal_text_with_options(&note, &[resource], true);
     assert!(text.contains("\x1b_Ga=T,t=f,f=100,q=2;"));
-    assert!(text.contains("\x1b\\photo.png\n\n"));
+    assert!(text.contains("\x1b\\\n\x1b[3mphoto.png\x1b[0m\n\n"));
     assert!(!text.contains("[Image:"));
 }
 
@@ -208,8 +208,8 @@ fn renders_multiple_images_with_filenames_for_kitty_terminal_output() {
     let text = enml_to_terminal_text_with_options(&note, &[first, second], true);
 
     assert_eq!(text.matches("\x1b_Ga=T,t=f,f=100,q=2;").count(), 2);
-    assert!(text.contains("\x1b\\first.png\n\n"));
-    assert!(text.contains("\x1b\\second.png\n\n"));
+    assert!(text.contains("\x1b\\\n\x1b[3mfirst.png\x1b[0m\n\n"));
+    assert!(text.contains("\x1b\\\n\x1b[3msecond.png\x1b[0m\n\n"));
 }
 
 #[test]

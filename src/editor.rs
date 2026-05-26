@@ -919,6 +919,10 @@ fn blue_terminal_text(text: &str) -> String {
     format!("\x1b[34m{text}\x1b[0m")
 }
 
+fn italic_terminal_text(text: &str) -> String {
+    format!("\x1b[3m{text}\x1b[0m")
+}
+
 fn code_text_from_html(content: &str) -> String {
     let content = strip_intertag_whitespace(content);
     let mut output = String::new();
@@ -1155,7 +1159,8 @@ fn replace_media_with_terminal_images(content: &str, resources: &[Resource]) -> 
             );
             image_index += 1;
             output.push_str(&image);
-            output.push_str(&filename);
+            output.push('\n');
+            output.push_str(&italic_terminal_text(&filename));
             output.push_str("\n\n");
         } else {
             output.push_str(&format!("{}\n\n", media_placeholder(tag, resources)));

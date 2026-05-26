@@ -3,7 +3,7 @@ class Reeknote < Formula
   homepage "https://gitlab.com/vitaly-zdanevich/reeknote"
   url "https://gitlab.com/vitaly-zdanevich/reeknote.git",
       revision: "355b934085d061fba91b87cccd1b4645cac7dc40"
-  version "0.8.0"
+  version "0.8.1"
   license "GPL-3.0-only"
   head "https://gitlab.com/vitaly-zdanevich/reeknote.git", branch: "master"
 
