@@ -46,12 +46,10 @@ mkdir -p "$sources_dir" "$specs_dir" "$output_dir"
 
 source_archive="$sources_dir/$package_name-$version.tar.gz"
 vendor_archive="$sources_dir/vendor-$version.tar.gz"
-vendor_dir="$work_dir/vendor"
 spec_file="$specs_dir/$package_name.spec"
 
 git archive --format=tar.gz --prefix="$package_name-$version/" -o "$source_archive" HEAD
-cargo vendor --locked "$vendor_dir" >/dev/null
-tar -C "$work_dir" -czf "$vendor_archive" vendor
+bash tools/build_vendor_archive.sh "$vendor_archive"
 sed "s|@VERSION@|$version|g" packaging/fedora/reeknote.spec.in > "$spec_file"
 
 rpmbuild --define "_topdir $rpmbuild_dir" -ba "$spec_file"

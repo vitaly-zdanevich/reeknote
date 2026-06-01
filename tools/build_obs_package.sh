@@ -41,16 +41,13 @@ mkdir -p "$output_dir"
 
 source_archive="$output_dir/$package_name-$version.tar.gz"
 vendor_archive="$output_dir/vendor-$version.tar.gz"
-vendor_dir="$work_dir/vendor"
 spec_file="$output_dir/$package_name.spec"
 
 git archive --format=tar.gz --prefix="$package_name-$version/" -o "$source_archive" HEAD
-cargo vendor --locked "$vendor_dir" >/dev/null
-tar -C "$work_dir" -czf "$vendor_archive" vendor
+bash tools/build_vendor_archive.sh "$vendor_archive"
 sed "s|@VERSION@|$version|g" packaging/obs/reeknote.spec.in > "$spec_file"
 
 sha256sum "$source_archive" > "$source_archive.sha256"
-sha256sum "$vendor_archive" > "$vendor_archive.sha256"
 
 if [ "$mode" = "source-only" ]; then
   exit 0

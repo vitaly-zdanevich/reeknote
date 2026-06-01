@@ -64,9 +64,9 @@ vendor:
   tags:
     - saas-linux-small-amd64
   script:
-    - cargo vendor --locked
-    - tar -czf vendor.tar.gz vendor
-    - sha256sum vendor.tar.gz > vendor.tar.gz.sha256
+    - bash tools/build_vendor_archive.sh vendor.tar.gz
+    - tar -tzf vendor.tar.gz | grep -Fx .cargo/config.toml
+    - tar -tzf vendor.tar.gz | grep -q '^vendor/'
   artifacts:
     paths:
       - vendor.tar.gz

@@ -818,7 +818,7 @@ dependencies = [
 
 [[package]]
 name = "reeknote"
-version = "0.8.1"
+version = "0.8.3"
 dependencies = [
  "base64",
  "evernote",

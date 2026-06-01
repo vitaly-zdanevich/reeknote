@@ -24,14 +24,6 @@ downloading Evernote notes to local files.
 %prep
 %autosetup -n %{name}-%{version}
 tar -xzf %{SOURCE1}
-mkdir -p .cargo
-cat > .cargo/config.toml <<'EOF'
-[source.crates-io]
-replace-with = "vendored-sources"
-
-[source.vendored-sources]
-directory = "vendor"
-EOF
 
 %build
 cargo build --frozen --release --bins

@@ -244,6 +244,7 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * Clippy lints;
 * Nix flake package builds;
 * tests;
+* Rust dependency vendoring for distribution packages;
 * Linux x86_64 release builds;
 * Linux ARM64 release builds;
 * Debian package builds for `amd64` and `arm64`;
@@ -263,6 +264,11 @@ Each build uploads a temporary artifact containing `reeknote`, `rnsync`, and
 a SHA-256 checksum. Version tag pipelines also upload those archives to the
 GitLab Generic Package Registry and create a GitLab Release with durable
 download links.
+
+The `vendor` CI job creates `vendor.tar.gz` with `vendor/` and
+`.cargo/config.toml`. Distribution packages can unpack this archive into the
+source tree and build with `cargo build --frozen --release --bins` without
+fetching Rust crates during the package build.
 
 Released Linux binaries are available from the project's GitLab Releases page.
 Release pipelines also publish `.deb`, `.rpm`, `.src.rpm`, and `.snap` packages
