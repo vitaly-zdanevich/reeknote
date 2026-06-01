@@ -65,8 +65,8 @@ vendor:
     - saas-linux-small-amd64
   script:
     - bash tools/build_vendor_archive.sh vendor.tar.gz
-    - tar -tzf vendor.tar.gz | grep -Fx .cargo/config.toml
-    - tar -tzf vendor.tar.gz | grep -q '^vendor/'
+    - tar -tzf vendor.tar.gz .cargo/config.toml >/dev/null
+    - tar -tzf vendor.tar.gz vendor >/dev/null
   artifacts:
     paths:
       - vendor.tar.gz

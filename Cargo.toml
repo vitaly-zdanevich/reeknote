@@ -30,7 +30,7 @@ path = "src/bin/rnsync.rs"
 [dependencies]
 base64 = "0.22"
 evernote = "0.1.2"
-image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
+image = { version = "=0.25.9", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 md5 = "0.7"
 mime_guess = "2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
