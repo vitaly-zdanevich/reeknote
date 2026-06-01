@@ -29,6 +29,6 @@ python3 tools/generate_freebsd_cargo_crates.py \
   packaging/freebsd/reeknote/Makefile.crates
 ```
 
-Before submitting upstream, update `GL_COMMIT` in `reeknote/Makefile` to the
-full commit hash matching the release being packaged, run `make makesum`, and
-include the generated `distinfo` in the FreeBSD ports patch.
+Before submitting upstream, make sure `DISTVERSION` matches the release tag,
+run `make makesum`, and include the generated `distinfo` in the FreeBSD ports
+patch.

@@ -1,6 +1,6 @@
 {
   "name": "reeknote",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "Command-line Evernote client",
   "license": "GPL-3.0-only",
   "homepage": "https://gitlab.com/vitaly-zdanevich/reeknote",
@@ -24,8 +24,8 @@
     "README.md"
   ],
   "optionalDependencies": {
-    "reeknote-linux-arm64": "0.8.3",
-    "reeknote-linux-x64": "0.8.3"
+    "reeknote-linux-arm64": "0.8.4",
+    "reeknote-linux-x64": "0.8.4"
   },
   "engines": {
     "node": ">=18"
