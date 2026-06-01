@@ -199,10 +199,9 @@ fn next_value(iter: &mut impl Iterator<Item = String>, arg: &str) -> Result<Stri
 }
 
 fn auth_token(storage: &Storage) -> Result<String> {
-    if let Ok(token) = std::env::var("EVERNOTE_DEV_TOKEN")
-        && !token.is_empty()
-    {
-        return Ok(token);
+    match std::env::var("EVERNOTE_DEV_TOKEN") {
+        Ok(token) if !token.is_empty() => return Ok(token),
+        _ => {}
     }
     storage.get_user_token().ok_or_else(|| {
         ReeknoteError::InvalidInput(
