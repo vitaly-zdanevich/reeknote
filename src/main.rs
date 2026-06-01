@@ -400,12 +400,12 @@ fn hydrate_note_image_resource(
         fill_missing_resource_hash(resource);
     }
 
-    if resource.data.body.is_empty()
-        && let Some(content_hash) = decode_hex_hash(&resource.data.body_hash)
-    {
-        let fetched = source.get_image_resource_by_hash(note_guid, &content_hash)?;
-        merge_hydrated_resource(resource, fetched);
-        fill_missing_resource_hash(resource);
+    if resource.data.body.is_empty() {
+        if let Some(content_hash) = decode_hex_hash(&resource.data.body_hash) {
+            let fetched = source.get_image_resource_by_hash(note_guid, &content_hash)?;
+            merge_hydrated_resource(resource, fetched);
+            fill_missing_resource_hash(resource);
+        }
     }
 
     Ok(())
@@ -441,7 +441,7 @@ fn merge_hydrated_resource(resource: &mut Resource, fetched: Resource) {
 }
 
 fn decode_hex_hash(hash: &str) -> Option<Vec<u8>> {
-    if !hash.len().is_multiple_of(2) {
+    if hash.len() % 2 != 0 {
         return None;
     }
 
@@ -966,8 +966,10 @@ fn handle_edit(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
         arg_string(&values, "url"),
         arg_bool(&values, "rawmd"),
     )?;
-    if raw && let Some(content) = raw_content {
-        input.content = Some(content);
+    if raw {
+        if let Some(content) = raw_content {
+            input.content = Some(content);
+        }
     }
     client.update_note(&note.guid, input)?;
     println!("Note successfully saved.");

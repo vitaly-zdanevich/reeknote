@@ -142,10 +142,10 @@ fn enml_to_text_internal(
         .unwrap_or(content_enml)
         .to_string();
 
-    if format == TextFormat::Pre
-        && let Some(pre) = extract_tag_body(&body, "pre")
-    {
-        return html_unescape(&pre);
+    if format == TextFormat::Pre {
+        if let Some(pre) = extract_tag_body(&body, "pre") {
+            return html_unescape(&pre);
+        }
     }
 
     if image_options.save_images {
@@ -193,16 +193,19 @@ pub fn get_images(content_enml: &str) -> Vec<ImageInfo> {
         let tag = &rest[..end];
         rest = &rest[end + 1..];
 
-        let media_type = attr_value(tag, "type");
-        let hash = attr_value(tag, "hash");
-        if let (Some(media_type), Some(hash)) = (media_type, hash)
-            && let Some(extension) = media_type.strip_prefix("image/")
-        {
-            images.push(ImageInfo {
-                hash,
-                extension: extension.to_string(),
-            });
-        }
+        let Some(media_type) = attr_value(tag, "type") else {
+            continue;
+        };
+        let Some(hash) = attr_value(tag, "hash") else {
+            continue;
+        };
+        let Some(extension) = media_type.strip_prefix("image/") else {
+            continue;
+        };
+        images.push(ImageInfo {
+            hash,
+            extension: extension.to_string(),
+        });
     }
 
     images
@@ -1108,24 +1111,25 @@ fn replace_media_with_images(content: &str, image_options: &ImageOptions, html: 
         let tag = &rest[..end];
         rest = &rest[end + 1..];
 
-        let media_type = attr_value(tag, "type");
-        let hash = attr_value(tag, "hash");
-        if let (Some(media_type), Some(hash), Some(base_filename)) =
-            (media_type, hash, image_options.base_filename.as_ref())
-            && let Some(extension) = media_type.strip_prefix("image/")
-        {
-            let extension = match extension {
-                "svg+xml" => "svg",
-                "jpeg" => "jpg",
-                value => value,
-            };
-            let source = format!("{base_filename}-{hash}.{extension}");
-            if html {
-                output.push_str(&format!("<img src=\"{source}\">"));
-            } else {
-                output.push_str(&format!("![image]({source})"));
+        if let (Some(media_type), Some(hash), Some(base_filename)) = (
+            attr_value(tag, "type"),
+            attr_value(tag, "hash"),
+            image_options.base_filename.as_ref(),
+        ) {
+            if let Some(extension) = media_type.strip_prefix("image/") {
+                let extension = match extension {
+                    "svg+xml" => "svg",
+                    "jpeg" => "jpg",
+                    value => value,
+                };
+                let source = format!("{base_filename}-{hash}.{extension}");
+                if html {
+                    output.push_str(&format!("<img src=\"{source}\">"));
+                } else {
+                    output.push_str(&format!("![image]({source})"));
+                }
+                continue;
             }
-            continue;
         }
         output.push_str("<en-media");
         output.push_str(tag);
@@ -1261,13 +1265,21 @@ fn media_placeholder(tag: &str, resources: &[Resource]) -> String {
 }
 
 fn media_filename(media_type: Option<&str>, hash: Option<&str>, resources: &[Resource]) -> String {
-    if let Some(hash) = hash
-        && let Some(resource) = resources
-            .iter()
-            .find(|resource| resource.data.body_hash == hash)
-        && !resource.filename.is_empty()
+    if let Some(filename) = hash
+        .and_then(|hash| {
+            resources
+                .iter()
+                .find(|resource| resource.data.body_hash == hash)
+        })
+        .and_then(|resource| {
+            if resource.filename.is_empty() {
+                None
+            } else {
+                Some(resource.filename.clone())
+            }
+        })
     {
-        return resource.filename.clone();
+        return filename;
     }
 
     let prefix = if media_type

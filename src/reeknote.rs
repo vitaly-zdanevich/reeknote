@@ -160,15 +160,13 @@ pub fn get_editor(storage: Option<&Storage>) -> String {
     {
         return editor.to_string();
     }
-    if let Ok(editor) = std::env::var("editor")
-        && !editor.is_empty()
-    {
-        return editor;
+    match std::env::var("editor") {
+        Ok(editor) if !editor.is_empty() => return editor,
+        _ => {}
     }
-    if let Ok(editor) = std::env::var("EDITOR")
-        && !editor.is_empty()
-    {
-        return editor;
+    match std::env::var("EDITOR") {
+        Ok(editor) if !editor.is_empty() => return editor,
+        _ => {}
     }
     if cfg!(windows) {
         config::DEF_WIN_EDITOR.to_string()
@@ -250,10 +248,8 @@ impl NotesService {
             url,
         };
 
-        if result.title.is_none()
-            && let Some(note) = note
-        {
-            result.title = Some(note.title.clone());
+        if result.title.is_none() {
+            result.title = note.map(|note| note.title.clone());
         }
 
         if result.content.is_none()
@@ -268,8 +264,10 @@ impl NotesService {
             result.content = Some(config::EDITOR_OPEN.to_string());
         }
 
-        if let Some(content) = result.content.clone()
-            && content != config::EDITOR_OPEN
+        if let Some(content) = result
+            .content
+            .clone()
+            .filter(|content| content != config::EDITOR_OPEN)
         {
             let loaded = if Path::new(&content).is_file() {
                 fs::read_to_string(&content)?
@@ -291,10 +289,8 @@ impl NotesService {
             result.reminder = Some(parse_reminder(&reminder)?);
         }
 
-        if result.url.is_none()
-            && let Some(note) = note
-        {
-            result.url = note.attributes.source_url.clone();
+        if result.url.is_none() {
+            result.url = note.and_then(|note| note.attributes.source_url.clone());
         }
 
         Ok(result)

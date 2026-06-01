@@ -788,13 +788,14 @@ fn resolve_linked_notebook(
     notebooks: Vec<LinkedNotebook>,
     notebook_ref: &str,
 ) -> Result<LinkedNotebook> {
-    if looks_like_guid(notebook_ref)
-        && let Some(notebook) = notebooks
+    if looks_like_guid(notebook_ref) {
+        if let Some(notebook) = notebooks
             .iter()
             .find(|notebook| notebook.guid == notebook_ref)
             .cloned()
-    {
-        return Ok(notebook);
+        {
+            return Ok(notebook);
+        }
     }
 
     let needle = notebook_ref.to_lowercase();
