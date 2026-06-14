@@ -1,5 +1,5 @@
 PORTNAME=	reeknote
-DISTVERSION=	0.8.4
+DISTVERSION=	0.8.5
 CATEGORIES=	deskutils
 
 MAINTAINER=	zdanevich.vitaly@ya.ru
