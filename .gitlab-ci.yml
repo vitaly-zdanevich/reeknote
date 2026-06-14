@@ -15,7 +15,7 @@ variables:
   AUR_IMAGE: archlinux:base-devel
   FEDORA_IMAGE: fedora:latest
   OPENSUSE_IMAGE: opensuse/tumbleweed:latest
-  SNAPCRAFT_IMAGE: canonical/snapcraft:8_core24
+  SNAPCRAFT_IMAGE: snapcore/snapcraft:stable
   NIX_IMAGE: nixos/nix:latest
   NIX_CONFIG: "experimental-features = nix-command flakes"
 

@@ -1,6 +1,6 @@
 {
   "name": "@vitaly-zdanevich/rnsync-linux-arm64",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Linux ARM64 binary for rnsync",
   "license": "GPL-3.0-only",
   "homepage": "https://gitlab.com/vitaly-zdanevich/reeknote",

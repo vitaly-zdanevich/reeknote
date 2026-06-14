@@ -1,6 +1,6 @@
 {
   "name": "@vitaly-zdanevich/rnsync",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Evernote note synchronization CLI",
   "license": "GPL-3.0-only",
   "homepage": "https://gitlab.com/vitaly-zdanevich/reeknote",
@@ -24,8 +24,8 @@
     "README.md"
   ],
   "optionalDependencies": {
-    "@vitaly-zdanevich/rnsync-linux-arm64": "0.8.5",
-    "@vitaly-zdanevich/rnsync-linux-x64": "0.8.5"
+    "@vitaly-zdanevich/rnsync-linux-arm64": "0.8.6",
+    "@vitaly-zdanevich/rnsync-linux-x64": "0.8.6"
   },
   "engines": {
     "node": ">=18"
