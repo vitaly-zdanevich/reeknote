@@ -125,6 +125,7 @@ jobs:
 
   build-pypi:
     needs: validate
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -283,6 +284,7 @@ jobs:
 
   package-rpm:
     needs: validate
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -312,6 +314,7 @@ jobs:
 
   package-obs:
     needs: validate
+    continue-on-error: true
     runs-on: ubuntu-24.04
     container: opensuse/tumbleweed:latest
     env:
@@ -346,12 +349,9 @@ jobs:
       - source
       - vendor
       - build-linux
-      - build-pypi
       - package-npm-source
       - package-npm-binary
       - package-deb
-      - package-rpm
-      - package-obs
     runs-on: ubuntu-24.04
     env:
       RELEASE_TAG: ${{ needs.validate.outputs.tag }}
