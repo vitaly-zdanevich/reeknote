@@ -150,10 +150,15 @@ jobs:
             summary: Evernote note synchronization CLI
     runs-on: ${{ matrix.runner }}
     container: ghcr.io/pyo3/maturin:v1.12.6
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.validate.outputs.tag }}
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "refs/tags/$RELEASE_TAG"
+          git checkout --detach FETCH_HEAD
       - run: cargo build --release --locked --bin "${{ matrix.binary }}"
       - run: >
           python3 tools/build_cli_wheel.py
@@ -296,7 +301,7 @@ jobs:
         run: |
           git init .
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth=1 origin "$RELEASE_TAG"
+          git fetch --depth=1 origin "refs/tags/$RELEASE_TAG"
           git checkout --detach FETCH_HEAD
       - run: bash tools/build_rpm.sh "$RELEASE_TAG" rpm-dist "${{ matrix.srpm_mode }}"
       - uses: actions/upload-artifact@v4
@@ -319,7 +324,7 @@ jobs:
         run: |
           git init .
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth=1 origin "$RELEASE_TAG"
+          git fetch --depth=1 origin "refs/tags/$RELEASE_TAG"
           git checkout --detach FETCH_HEAD
       - run: bash tools/build_obs_package.sh "$RELEASE_TAG" obs-dist build-rpm
       - uses: actions/upload-artifact@v4
