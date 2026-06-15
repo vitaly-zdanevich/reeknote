@@ -128,6 +128,25 @@ and rnsync writes notes to user-selected paths.
 A draft FreeBSD port lives in `packaging/freebsd`. It is not submitted to the
 FreeBSD ports tree yet and must be validated on FreeBSD before submission.
 
+### Install on Gentoo Linux
+
+Reeknote can be installed from the `::gentoo-zh` overlay:
+
+https://github.com/microcai/gentoo-zh/tree/master/app-doc/reeknote
+
+Enable and sync the overlay:
+
+```sh
+sudo eselect repository enable gentoo-zh
+sudo emaint sync -r gentoo-zh
+```
+
+Then install Reeknote:
+
+```sh
+sudo emerge --ask app-doc/reeknote
+```
+
 ### Install on Arch Linux
 
 Reeknote is packaged for Arch Linux through the AUR. With an AUR helper:
