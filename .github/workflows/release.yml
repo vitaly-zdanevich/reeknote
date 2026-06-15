@@ -1,0 +1,379 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: 1.94.0
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - id: meta
+        run: |
+          tag="$RELEASE_TAG"
+          if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: $tag" >&2
+            exit 2
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Check Cargo version
+        run: |
+          version="$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n 1)"
+          test "$version" = "$RELEASE_TAG"
+
+  source:
+    needs: validate
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Build source archive
+        run: |
+          git archive --format=tar.gz --prefix="reeknote-$RELEASE_TAG/" -o "reeknote-$RELEASE_TAG.tar.gz" HEAD
+          sha256sum "reeknote-$RELEASE_TAG.tar.gz" > "reeknote-$RELEASE_TAG.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source
+          path: |
+            reeknote-*.tar.gz
+            reeknote-*.tar.gz.sha256
+
+  vendor:
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+      - run: bash tools/build_vendor_archive.sh vendor.tar.gz
+      - run: |
+          tar -tzf vendor.tar.gz .cargo/config.toml >/dev/null
+          tar -tzf vendor.tar.gz vendor >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vendor
+          path: |
+            vendor.tar.gz
+            vendor.tar.gz.sha256
+
+  build-linux:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-gnu
+            artifact_name: reeknote-linux-x86_64
+          - runner: ubuntu-24.04-arm
+            rust_target: aarch64-unknown-linux-gnu
+            artifact_name: reeknote-linux-aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+          rustup target add "${{ matrix.rust_target }}"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/git
+            ~/.cargo/registry
+          key: release-cargo-build-${{ runner.os }}-${{ runner.arch }}-${{ matrix.rust_target }}-${{ hashFiles('Cargo.lock') }}
+      - run: cargo build --locked --release --bins --target "${{ matrix.rust_target }}"
+      - name: Pack binaries
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.rust_target }}/release/reeknote" dist/
+          cp "target/${{ matrix.rust_target }}/release/rnsync" dist/
+          tar -C dist -czf "${{ matrix.artifact_name }}.tar.gz" reeknote rnsync
+          sha256sum "${{ matrix.artifact_name }}.tar.gz" > "${{ matrix.artifact_name }}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.artifact_name }}
+          path: |
+            ${{ matrix.artifact_name }}.tar.gz
+            ${{ matrix.artifact_name }}.tar.gz.sha256
+
+  build-pypi:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            package: reeknote
+            binary: reeknote
+            platform_tag: manylinux_2_17_x86_64
+            summary: Command-line Evernote client
+          - runner: ubuntu-24.04-arm
+            package: reeknote
+            binary: reeknote
+            platform_tag: manylinux_2_17_aarch64
+            summary: Command-line Evernote client
+          - runner: ubuntu-24.04
+            package: rnsync
+            binary: rnsync
+            platform_tag: manylinux_2_17_x86_64
+            summary: Evernote note synchronization CLI
+          - runner: ubuntu-24.04-arm
+            package: rnsync
+            binary: rnsync
+            platform_tag: manylinux_2_17_aarch64
+            summary: Evernote note synchronization CLI
+    runs-on: ${{ matrix.runner }}
+    container: ghcr.io/pyo3/maturin:v1.12.6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - run: cargo build --release --locked --bin "${{ matrix.binary }}"
+      - run: >
+          python3 tools/build_cli_wheel.py
+          --package "${{ matrix.package }}"
+          --command "${{ matrix.binary }}"
+          --binary "target/release/${{ matrix.binary }}"
+          --platform-tag "${{ matrix.platform_tag }}"
+          --summary "${{ matrix.summary }}"
+          --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pypi-${{ matrix.package }}-${{ matrix.platform_tag }}
+          path: dist/*.whl
+
+  package-npm-source:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package_dir: npm/reeknote
+            artifact_suffix: reeknote
+          - package_dir: npm/rnsync
+            artifact_suffix: rnsync
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: |
+          mkdir -p npm-dist
+          npm pack "./${{ matrix.package_dir }}" --pack-destination npm-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-source-${{ matrix.artifact_suffix }}
+          path: npm-dist/*.tgz
+
+  package-npm-binary:
+    needs:
+      - validate
+      - build-linux
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package_dir: npm/reeknote-linux-x64
+            artifact_suffix: reeknote-linux-x64
+            linux_artifact: linux-reeknote-linux-x86_64
+            tarball: reeknote-linux-x86_64.tar.gz
+            binary: reeknote
+          - package_dir: npm/reeknote-linux-arm64
+            artifact_suffix: reeknote-linux-arm64
+            linux_artifact: linux-reeknote-linux-aarch64
+            tarball: reeknote-linux-aarch64.tar.gz
+            binary: reeknote
+          - package_dir: npm/rnsync-linux-x64
+            artifact_suffix: rnsync-linux-x64
+            linux_artifact: linux-reeknote-linux-x86_64
+            tarball: reeknote-linux-x86_64.tar.gz
+            binary: rnsync
+          - package_dir: npm/rnsync-linux-arm64
+            artifact_suffix: rnsync-linux-arm64
+            linux_artifact: linux-reeknote-linux-aarch64
+            tarball: reeknote-linux-aarch64.tar.gz
+            binary: rnsync
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.linux_artifact }}
+          path: .
+      - run: |
+          mkdir -p "${{ matrix.package_dir }}/bin" npm-dist unpack
+          tar -xzf "${{ matrix.tarball }}" -C unpack
+          cp "unpack/${{ matrix.binary }}" "${{ matrix.package_dir }}/bin/${{ matrix.binary }}"
+          npm pack "./${{ matrix.package_dir }}" --pack-destination npm-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-binary-${{ matrix.artifact_suffix }}
+          path: npm-dist/*.tgz
+
+  package-deb:
+    needs:
+      - validate
+      - build-linux
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - deb_arch: amd64
+            linux_artifact: linux-reeknote-linux-x86_64
+            tarball: reeknote-linux-x86_64.tar.gz
+          - deb_arch: arm64
+            linux_artifact: linux-reeknote-linux-aarch64
+            tarball: reeknote-linux-aarch64.tar.gz
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.linux_artifact }}
+          path: .
+      - run: bash tools/build_deb.sh "$RELEASE_TAG" "${{ matrix.deb_arch }}" "${{ matrix.tarball }}" deb-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.deb_arch }}
+          path: deb-dist/*
+
+  package-rpm:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            srpm_mode: include-srpm
+          - runner: ubuntu-24.04-arm
+            srpm_mode: binary-only
+    runs-on: ${{ matrix.runner }}
+    container: fedora:latest
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - name: Install system packages
+        run: dnf install --assumeyes cargo findutils gcc git gzip rpm-build rust tar
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$RELEASE_TAG"
+          git checkout --detach FETCH_HEAD
+      - run: bash tools/build_rpm.sh "$RELEASE_TAG" rpm-dist "${{ matrix.srpm_mode }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ runner.arch }}
+          path: rpm-dist/*
+
+  package-obs:
+    needs: validate
+    runs-on: ubuntu-24.04
+    container: opensuse/tumbleweed:latest
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - name: Install system packages
+        run: |
+          zypper --non-interactive refresh
+          zypper --non-interactive install ca-certificates cargo findutils gcc git gzip rpm-build rust tar
+      - name: Checkout
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$RELEASE_TAG"
+          git checkout --detach FETCH_HEAD
+      - run: bash tools/build_obs_package.sh "$RELEASE_TAG" obs-dist build-rpm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obs
+          path: |
+            obs-dist/reeknote.spec
+            obs-dist/vendor-*.tar.gz
+            obs-dist/vendor-*.tar.gz.sha256
+            obs-dist/reeknote_*_opensuse_*.rpm
+            obs-dist/reeknote_*_opensuse_*.rpm.sha256
+            obs-dist/reeknote_*_opensuse.src.rpm
+            obs-dist/reeknote_*_opensuse.src.rpm.sha256
+
+  release:
+    needs:
+      - validate
+      - source
+      - vendor
+      - build-linux
+      - build-pypi
+      - package-npm-source
+      - package-npm-binary
+      - package-deb
+      - package-rpm
+      - package-obs
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: List release assets
+        run: find release-assets -maxdepth 1 -type f -print | sort
+      - name: Create or update GitHub Release
+        run: |
+          mapfile -t assets < <(find release-assets -maxdepth 1 -type f -print | sort)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets found" >&2
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --verify-tag \
+              --title "Reeknote $RELEASE_TAG" \
+              --notes "Ready-to-use release assets for Reeknote $RELEASE_TAG."
+          fi

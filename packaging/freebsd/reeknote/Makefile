@@ -4,15 +4,15 @@ CATEGORIES=	deskutils
 
 MAINTAINER=	zdanevich.vitaly@ya.ru
 COMMENT=	Command-line Evernote client
-WWW=		https://gitlab.com/vitaly-zdanevich/reeknote
+WWW=		https://github.com/vitaly-zdanevich/reeknote
 
 LICENSE=	GPLv3
 LICENSE_FILE=	${WRKSRC}/LICENSE
 
 USES=		cargo
-USE_GITLAB=	yes
-GL_ACCOUNT=	vitaly-zdanevich
-GL_TAGNAME=	${DISTVERSION}
+USE_GITHUB=	yes
+GH_ACCOUNT=	vitaly-zdanevich
+GH_TAGNAME=	${DISTVERSION}
 
 CARGO_BUILD_ARGS=	--bins
 CARGO_INSTALL_ARGS=	--bins

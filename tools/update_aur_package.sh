@@ -8,8 +8,8 @@ fi
 
 version="$1"
 package_name="reeknote"
-project_url="${CI_PROJECT_URL:-https://gitlab.com/vitaly-zdanevich/reeknote}"
-source_url="${AUR_SOURCE_URL:-$project_url/-/archive/$version/reeknote-$version.tar.gz}"
+project_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-vitaly-zdanevich/reeknote}"
+source_url="${AUR_SOURCE_URL:-$project_url/archive/refs/tags/$version.tar.gz}"
 aur_remote="ssh://aur@aur.archlinux.org/$package_name.git"
 work_dir="$(mktemp -d)"
 aur_repo="$(mktemp -d -t "aur-$package_name.XXXXXX")"
@@ -104,8 +104,8 @@ else
   )
 fi
 
-git -C "$aur_repo" config user.name "${GITLAB_USER_NAME:-Reeknote CI}"
-git -C "$aur_repo" config user.email "${GITLAB_USER_EMAIL:-ci@gitlab.com}"
+git -C "$aur_repo" config user.name "${GITHUB_ACTOR:-Reeknote CI}"
+git -C "$aur_repo" config user.email "${GIT_AUTHOR_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
 git -C "$aur_repo" add PKGBUILD .SRCINFO
 
 if git -C "$aur_repo" diff --cached --quiet; then

@@ -70,7 +70,7 @@ Installed-Size: $installed_size
 Depends: libc6 (>= 2.36), ca-certificates
 Recommends: mpv
 Suggests: kitty
-Homepage: https://gitlab.com/vitaly-zdanevich/reeknote
+Homepage: https://github.com/vitaly-zdanevich/reeknote
 Description: command-line Evernote client
  Reeknote is a command-line client for Evernote.
  .

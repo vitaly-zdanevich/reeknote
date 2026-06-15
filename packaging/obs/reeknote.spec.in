@@ -4,7 +4,7 @@ Release:        1%{?dist}
 Summary:        Command-line Evernote client
 
 License:        GPL-3.0-only
-URL:            https://gitlab.com/vitaly-zdanevich/reeknote
+URL:            https://github.com/vitaly-zdanevich/reeknote
 Source0:        %{name}-%{version}.tar.gz
 Source1:        vendor-%{version}.tar.gz
 

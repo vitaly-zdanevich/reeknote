@@ -68,8 +68,8 @@ Version: {version}
 Summary: {args.summary}
 License: GPL-3.0-only
 Requires-Python: >=3.8
-Home-page: https://gitlab.com/vitaly-zdanevich/reeknote
-Project-URL: Source, https://gitlab.com/vitaly-zdanevich/reeknote
+Home-page: https://github.com/vitaly-zdanevich/reeknote
+Project-URL: Source, https://github.com/vitaly-zdanevich/reeknote
 Description-Content-Type: text/markdown
 
 {readme}

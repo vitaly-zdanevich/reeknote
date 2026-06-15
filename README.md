@@ -91,7 +91,7 @@ nix profile install nixpkgs#reeknote
 Reeknote includes a Homebrew formula for installing from a tap:
 
 ```sh
-brew tap vitaly-zdanevich/reeknote https://gitlab.com/vitaly-zdanevich/reeknote.git
+brew tap vitaly-zdanevich/reeknote https://github.com/vitaly-zdanevich/reeknote.git
 brew install reeknote
 ```
 
@@ -101,20 +101,14 @@ For audio playback support, install `mpv` too:
 brew install mpv
 ```
 
-### Install With APT
+### Install With DEB
 
-The GitLab Pages APT repository is intended for Debian 12, Ubuntu 24.04, and
-newer compatible distributions on `amd64` and `arm64`.
+Download the matching `.deb` package for your architecture from the GitHub
+Releases page, then install it with APT. The packages target Debian 12, Ubuntu
+24.04, and newer compatible distributions on `amd64` and `arm64`.
 
 ```sh
-sudo apt install ca-certificates curl gnupg
-sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL https://vitaly-zdanevich.gitlab.io/reeknote/reeknote-archive-keyring.asc \
-  | sudo gpg --dearmor -o /etc/apt/keyrings/reeknote.gpg
-echo "deb [signed-by=/etc/apt/keyrings/reeknote.gpg] https://vitaly-zdanevich.gitlab.io/reeknote stable main" \
-  | sudo tee /etc/apt/sources.list.d/reeknote.list >/dev/null
-sudo apt update
-sudo apt install reeknote
+sudo apt install ./reeknote_VERSION_ARCH.deb
 ```
 
 ### Install With Snap
@@ -238,7 +232,7 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 
 ## CI/CD
 
-The GitLab CI pipeline in `.gitlab-ci.yml` runs:
+The GitHub Actions workflows in `.github/workflows` run:
 
 * formatting checks;
 * Clippy lints;
@@ -250,102 +244,34 @@ The GitLab CI pipeline in `.gitlab-ci.yml` runs:
 * Debian package builds for `amd64` and `arm64`;
 * Fedora RPM package builds for `x86_64` and `aarch64`;
 * openSUSE OBS package builds for Tumbleweed `x86_64`;
-* Snap package builds for `reeknote` and `rnsync` on `amd64` and `arm64`;
 * Linux x86_64 and ARM64 PyPI wheel builds for `reeknote` and `rnsync`;
 * npm package builds for `reeknote` and `rnsync` on Linux x64 and ARM64;
-* GitLab Pages APT repository publishing;
-* Arch Linux AUR package publishing;
-* Fedora Copr publishing when Copr credentials are configured;
-* openSUSE OBS publishing when osc credentials are configured;
-* Snap Store publishing when Snapcraft credentials are configured;
-* crates.io package publishing for the `reeknote` Cargo package.
+* GitHub Release asset publishing for version tags.
 
 Each build uploads a temporary artifact containing `reeknote`, `rnsync`, and
-a SHA-256 checksum. Version tag pipelines also upload those archives to the
-GitLab Generic Package Registry and create a GitLab Release with durable
-download links.
+a SHA-256 checksum. Version tag pipelines create or update a GitHub Release
+with durable download links.
 
 The `vendor` CI job creates `vendor.tar.gz` with `vendor/` and
 `.cargo/config.toml`. Distribution packages can unpack this archive into the
 source tree and build with `cargo build --frozen --release --bins` without
 fetching Rust crates during the package build.
 
-Released Linux binaries are available from the project's GitLab Releases page.
-Release pipelines also publish `.deb`, `.rpm`, `.src.rpm`, and `.snap` packages
-as GitLab Release assets and update the GitLab Pages APT repository.
+Released Linux binaries are available from the project's GitHub Releases page.
+Release pipelines also attach `.deb`, `.rpm`, `.src.rpm`, PyPI wheel, npm
+package, OBS source package, and vendored Rust dependency archives as GitHub
+Release assets.
 
-Version tag pipelines publish PyPI wheels through PyPI Trusted Publishing. To
-enable the first publish, configure PyPI pending publishers for projects
-`reeknote` and `rnsync` with namespace `vitaly-zdanevich`, project `reeknote`,
-workflow `.gitlab-ci.yml`, and environment `release`.
-
-Version tag pipelines publish npm packages through npm Trusted Publishing. To
-enable the first publish, configure npm trusted publishers for `reeknote`,
-`reeknote-linux-x64`, `reeknote-linux-arm64`, `@vitaly-zdanevich/rnsync`,
-`@vitaly-zdanevich/rnsync-linux-x64`, and
-`@vitaly-zdanevich/rnsync-linux-arm64` with namespace `vitaly-zdanevich`,
-project `reeknote`, CI file `.gitlab-ci.yml`, and environment `release`.
-
-Version tag pipelines publish the Rust crate to crates.io with `cargo publish`.
-Configure a protected masked GitLab CI variable named `CRATES_IO_TOKEN`
-containing a crates.io API token with publish rights for the `reeknote` crate.
-The crates.io package installs both `reeknote` and `rnsync`.
-
-Version tag pipelines publish the APT repository through GitLab Pages. Configure
-a protected GitLab CI variable named `APT_GPG_PRIVATE_KEY` containing the
-ASCII-armored private key used to sign the repository. A File-type variable is
-recommended; the CI accepts either a file variable path or the key text itself.
-If the key is protected with a passphrase, also configure `APT_GPG_PASSPHRASE`.
-
-Version tag pipelines publish the Arch Linux AUR package by updating the AUR
-Git repository for `reeknote`. Configure a protected masked GitLab CI variable
-named `AUR_SSH_PRIVATE_KEY` containing a private SSH key whose public key is
-registered in the AUR account. A File-type variable is recommended; the CI
-accepts either a file variable path or the key text itself. The first successful
-push creates the AUR package if it does not already exist. Optionally configure
-`AUR_SSH_KNOWN_HOSTS` to pin the AUR SSH host key instead of using `ssh-keyscan`.
-
-Version tag pipelines publish the Fedora source RPM to Copr when Copr
-credentials are configured. Create the Copr project first, then configure a
-protected masked GitLab CI variable named `COPR_CONFIG` containing the
-`~/.config/copr` credentials file. A File-type variable is recommended; the CI
-accepts either a file variable path or the file text itself. The job builds the
-project named `reeknote` by default; set `COPR_PROJECT` if the Copr project name
-or owner-qualified project name is different, such as `user/reeknote`.
-
-Version tag pipelines publish the openSUSE source package to OBS when osc
-credentials are configured. Create the OBS project and package first, then
-configure a protected masked GitLab CI variable named `OSC_CONFIG` containing
-the `~/.config/osc/oscrc` credentials file. A File-type variable is recommended;
-the CI accepts either a file variable path or the file text itself. The job uses
-project `home:vitaly-zdanevich:reeknote` and package `reeknote` by default; set
-`OBS_PROJECT`, `OBS_PACKAGE`, or `OBS_APIURL` if your OBS project layout differs.
-
-Version tag pipelines publish separate `reeknote` and `rnsync` snaps to the Snap
-Store when Snapcraft credentials are configured. Register both snap names first,
-then configure a protected masked GitLab CI variable named
-`SNAPCRAFT_STORE_CREDENTIALS` containing credentials from `snapcraft
-export-login`. A File-type variable is recommended; the CI accepts either a file
-variable path or the credentials text itself. The job publishes to `stable` by
-default; set `SNAPCRAFT_CHANNEL` to publish to another channel. Because these
-snaps use classic confinement, the first store release requires Snap Store
-classic-confinement approval.
-
-```sh
-snapcraft export-login \
-  --snaps=reeknote,rnsync \
-  --acls=package_access,package_push,package_update,package_release \
-  --channels=stable \
-  snapcraft-login
-```
+Publishing to PyPI, npm, crates.io, AUR, Copr, OBS, Snap Store, and an APT
+repository is intentionally separate from the first GitHub Actions migration.
+Configure the corresponding GitHub trusted publishers or repository secrets
+before enabling those publishing jobs.
 
 The local Nix flake builds the same Rust package shape intended for a future
 Nixpkgs pull request. Nixpkgs publishing is not automatic from this repository;
 it still requires a reviewed pull request to `NixOS/nixpkgs`.
 
-The runner tags in `.gitlab-ci.yml` target GitLab.com hosted Linux runners. If
-this project uses self-managed or differently tagged runners, adjust the
-`tags` values.
+The release workflow uses standard GitHub-hosted x64 and arm64 Linux runners.
 
 ## Reeknote Settings
 

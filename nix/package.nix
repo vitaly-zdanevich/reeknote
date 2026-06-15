@@ -34,7 +34,7 @@ rustPlatform.buildRustPackage rec {
 
   meta = {
     description = "Command-line Evernote client";
-    homepage = "https://gitlab.com/vitaly-zdanevich/reeknote";
+    homepage = "https://github.com/vitaly-zdanevich/reeknote";
     license = lib.licenses.gpl3Only;
     mainProgram = "reeknote";
     platforms = lib.platforms.linux;
