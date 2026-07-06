@@ -120,16 +120,27 @@ pub fn create_file_from_note(
     fs::create_dir_all(path)?;
     let escaped_title = escape_path_component(&note.title);
     let mut image_options = image_options.clone();
-    if image_options.save_images {
-        image_options.base_filename = Some(if image_options.images_in_subdir {
-            format!("{escaped_title}_images/{escaped_title}")
+    if image_options.save_images || image_options.save_attachments {
+        let resources_subdir = resource_subdir_name(&escaped_title, &image_options);
+        image_options.base_filename = Some(if let Some(resources_subdir) = &resources_subdir {
+            format!("{resources_subdir}/{escaped_title}")
         } else {
             escaped_title.clone()
         });
-        save_note_images(note, path, &escaped_title, &image_options)?;
+        save_note_resources(
+            note,
+            path,
+            &escaped_title,
+            &image_options,
+            resources_subdir.as_deref(),
+        )?;
     }
-    let content =
-        editor::enml_to_text_with_options(&note.content, format.text_format(), &image_options);
+    let content = editor::enml_to_text_with_options_and_resources(
+        &note.content,
+        format.text_format(),
+        &image_options,
+        &note.resources,
+    );
     let output_path = path.join(format!("{}{}", escaped_title, format.extension()));
     fs::write(&output_path, remove_control_characters(&content))?;
     Ok(output_path)
@@ -139,37 +150,77 @@ pub fn escape_path_component(value: &str) -> String {
     value.replace(std::path::MAIN_SEPARATOR, "-")
 }
 
-fn save_note_images(
+fn save_note_resources(
     note: &Note,
     path: &Path,
     escaped_title: &str,
     image_options: &ImageOptions,
+    resources_subdir: Option<&str>,
 ) -> Result<()> {
-    let image_dir = if image_options.images_in_subdir {
-        let image_dir = path.join(format!("{escaped_title}_images"));
-        fs::create_dir_all(&image_dir)?;
-        image_dir
-    } else {
-        path.to_path_buf()
-    };
+    let resource_dir = resources_subdir
+        .map(|subdir| path.join(subdir))
+        .unwrap_or_else(|| path.to_path_buf());
+    fs::create_dir_all(&resource_dir)?;
 
     for resource in note
         .resources
         .iter()
-        .filter(|resource| resource.mime.as_deref().and_then(image_extension).is_some())
+        .filter(|resource| should_save_resource(resource, image_options))
     {
-        if !resource.data.body.is_empty() {
-            let hash = resource_hash(resource);
-            let extension = resource
-                .mime
-                .as_deref()
-                .and_then(image_extension)
-                .unwrap_or("bin");
-            let filename = format!("{escaped_title}-{hash}.{extension}");
-            fs::write(image_dir.join(filename), &resource.data.body)?;
-        }
+        fs::write(
+            resource_dir.join(saved_resource_filename(escaped_title, resource)),
+            &resource.data.body,
+        )?;
     }
     Ok(())
+}
+
+fn resource_subdir_name(escaped_title: &str, image_options: &ImageOptions) -> Option<String> {
+    if image_options.save_attachments && image_options.attachments_in_subdir {
+        return Some(format!("{escaped_title}_attachments"));
+    }
+    if image_options.save_images
+        && !image_options.save_attachments
+        && image_options.images_in_subdir
+    {
+        return Some(format!("{escaped_title}_images"));
+    }
+    None
+}
+
+fn should_save_resource(resource: &Resource, image_options: &ImageOptions) -> bool {
+    if resource.data.body.is_empty() {
+        return false;
+    }
+    if image_options.save_attachments {
+        return true;
+    }
+    image_options.save_images && resource.mime.as_deref().and_then(image_extension).is_some()
+}
+
+fn saved_resource_filename(escaped_title: &str, resource: &Resource) -> String {
+    let hash = resource_hash(resource);
+    if resource.mime.as_deref().and_then(image_extension).is_some() {
+        let extension = resource
+            .mime
+            .as_deref()
+            .and_then(image_extension)
+            .unwrap_or("bin");
+        return format!("{escaped_title}-{hash}.{extension}");
+    }
+
+    if !resource.filename.is_empty() {
+        return format!(
+            "{escaped_title}-{hash}-{}",
+            escape_path_component(&resource.filename)
+        );
+    }
+
+    if let Some(extension) = resource.mime.as_deref().and_then(attachment_extension) {
+        return format!("{escaped_title}-{hash}.{extension}");
+    }
+
+    format!("{escaped_title}-{hash}")
 }
 
 fn resource_hash(resource: &Resource) -> String {
@@ -184,6 +235,15 @@ fn image_extension(mime: &str) -> Option<&str> {
         "svg+xml" => Some("svg"),
         "jpeg" => Some("jpg"),
         extension => Some(extension),
+    }
+}
+
+fn attachment_extension(mime: &str) -> Option<&str> {
+    match mime {
+        "application/pdf" => Some("pdf"),
+        "audio/mpeg" => Some("mp3"),
+        "text/plain" => Some("txt"),
+        value => value.rsplit_once('/').map(|(_, extension)| extension),
     }
 }
 
@@ -223,6 +283,50 @@ mod tests {
             .unwrap();
         let content = std::fs::read_to_string(path).unwrap();
         assert!(content.contains("œ ž © µ ¶ å õ ý þ ß Ü"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn saves_non_image_attachments_and_links_them_from_html() {
+        let dir = std::env::temp_dir().join(format!(
+            "reeknote-rnsync-attachments-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let body = b"pdf bytes".to_vec();
+        let hash = format!("{:x}", md5::compute(&body));
+        let note = Note {
+            title: "Attachment Note".to_string(),
+            content: editor::wrap_enml(&format!(
+                "<div>See this</div><en-media type=\"application/pdf\" hash=\"{hash}\" />"
+            )),
+            resources: vec![Resource {
+                guid: String::new(),
+                mime: Some("application/pdf".to_string()),
+                filename: "document.pdf".to_string(),
+                data: crate::models::ResourceData {
+                    body_hash: hash.clone(),
+                    body: body.clone(),
+                    size: body.len(),
+                },
+            }],
+            ..Note::default()
+        };
+        let path = create_file_from_note(
+            &note,
+            &dir,
+            SyncFormat::Html,
+            &ImageOptions {
+                save_attachments: true,
+                ..ImageOptions::default()
+            },
+        )
+        .unwrap();
+        let content = std::fs::read_to_string(path).unwrap();
+        let filename = format!("Attachment Note-{hash}-document.pdf");
+        assert!(content.contains(&format!("href=\"{filename}\"")));
+        assert!(content.contains("Attachment: document.pdf"));
+        assert_eq!(std::fs::read(dir.join(filename)).unwrap(), body);
         let _ = std::fs::remove_dir_all(dir);
     }
 

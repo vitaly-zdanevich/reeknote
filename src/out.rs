@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn formats_about() {
-        assert!(about().contains("Version: 3.0.24"));
+        assert!(about().contains("Version: 3.0.25"));
         assert!(about().contains("Use reeknote --help"));
     }
 

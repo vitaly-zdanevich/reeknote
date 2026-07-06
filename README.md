@@ -307,6 +307,17 @@ This starts the authorization process. Reeknote asks for a developer token or
 uses OAuth, then stores the token in the local database. Re-authorization is not
 required unless you log out or change users.
 
+By default, OAuth uses Reeknote's built-in Evernote app credentials. To test a
+different legacy Evernote OAuth application without changing the source code,
+set `REEKNOTE_EVERNOTE_CONSUMER_KEY` and
+`REEKNOTE_EVERNOTE_CONSUMER_SECRET` before running `reeknote login`.
+
+```sh
+REEKNOTE_EVERNOTE_CONSUMER_KEY=... \
+REEKNOTE_EVERNOTE_CONSUMER_SECRET=... \
+reeknote login
+```
+
 After authorization, you can start to work with Evernote.
 
 ### Logging Out And Changing Users
@@ -352,7 +363,7 @@ for the application name, use `reeknote`.
 $ reeknote settings
 Reeknote
 ******************************
-Version: 3.0.24
+Version: 3.0.25
 App dir: /home/username/.reeknote
 Error log: /home/username/.reeknote/error.log
 Editor: nano

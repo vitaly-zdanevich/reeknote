@@ -11,4 +11,4 @@ pub mod rnsync;
 pub mod storage;
 pub mod tools;
 
-pub const VERSION: &str = "3.0.24";
+pub const VERSION: &str = "3.0.25";

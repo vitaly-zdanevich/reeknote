@@ -48,7 +48,7 @@ fn run(args: Vec<String>) -> Result<()> {
             let notes = client.download_linked_notebook_notes(
                 &notebook,
                 args.count,
-                args.image_options.save_images,
+                should_download_resources(&args.image_options),
             )?;
             for note in notes {
                 let path = rnsync::create_file_from_note(
@@ -92,7 +92,7 @@ fn download_notebook(
         NotesService::create_search_request(None, &[], notebook, None, false, false, false, false)?;
     let result = client.find_notes(&request, args.count, false)?;
     for metadata in result.notes {
-        let note = if args.image_options.save_images {
+        let note = if should_download_resources(&args.image_options) {
             client.get_note_with_resources(&metadata.guid)?
         } else {
             client.get_note(&metadata.guid)?
@@ -102,6 +102,10 @@ fn download_notebook(
         println!("{}", path.display());
     }
     Ok(())
+}
+
+fn should_download_resources(image_options: &ImageOptions) -> bool {
+    image_options.save_images || image_options.save_attachments
 }
 
 fn parse_args(args: Vec<String>) -> Result<SyncArgs> {
@@ -114,6 +118,8 @@ fn parse_args(args: Vec<String>) -> Result<SyncArgs> {
     let mut all_linked = false;
     let mut save_images = false;
     let mut images_in_subdir = false;
+    let mut save_attachments = false;
+    let mut attachments_in_subdir = false;
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -153,6 +159,12 @@ fn parse_args(args: Vec<String>) -> Result<SyncArgs> {
             "--images-in-subdir" => {
                 images_in_subdir = true;
             }
+            "--save-attachments" => {
+                save_attachments = true;
+            }
+            "--attachments-in-subdir" => {
+                attachments_in_subdir = true;
+            }
             "--logpath" | "-l" => {
                 let _ = next_value(&mut iter, &arg)?;
             }
@@ -188,6 +200,8 @@ fn parse_args(args: Vec<String>) -> Result<SyncArgs> {
         image_options: ImageOptions {
             save_images,
             images_in_subdir,
+            save_attachments,
+            attachments_in_subdir,
             base_filename: None,
         },
     })
@@ -211,7 +225,7 @@ fn auth_token(storage: &Storage) -> Result<String> {
 }
 
 fn help() -> String {
-    "Usage: rnsync [--path PATH] [--notebook NOTEBOOK] [--all] [--all-linked] [--mask MASK] [--format plain|markdown|html] [--count N] [--download-only] [--save-images] [--images-in-subdir]\n\nThis Rust rnsync currently downloads notes to local files only. It does not create, update, or delete Evernote notes.\n".to_string()
+    "Usage: rnsync [--path PATH] [--notebook NOTEBOOK] [--all] [--all-linked] [--mask MASK] [--format plain|markdown|html] [--count N] [--download-only] [--save-images] [--images-in-subdir] [--save-attachments] [--attachments-in-subdir]\n\nThis Rust rnsync currently downloads notes to local files only. It does not create, update, or delete Evernote notes.\n".to_string()
 }
 
 #[cfg(test)]
@@ -251,6 +265,8 @@ mod tests {
             "*.md".to_string(),
             "--save-images".to_string(),
             "--images-in-subdir".to_string(),
+            "--save-attachments".to_string(),
+            "--attachments-in-subdir".to_string(),
         ])
         .unwrap();
         assert!(args.all);
@@ -258,5 +274,7 @@ mod tests {
         assert_eq!(args.mask.as_deref(), Some("*.md"));
         assert!(args.image_options.save_images);
         assert!(args.image_options.images_in_subdir);
+        assert!(args.image_options.save_attachments);
+        assert!(args.image_options.attachments_in_subdir);
     }
 }

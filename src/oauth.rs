@@ -1,6 +1,7 @@
 use crate::config::{CONSUMER_KEY, CONSUMER_SECRET, Config};
 use crate::errors::{ReeknoteError, Result};
 use std::collections::BTreeMap;
+use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,8 +21,16 @@ impl OAuthClient {
     pub fn new(config: &Config) -> Self {
         Self {
             base_url: config.user_base_url.clone(),
-            consumer_key: CONSUMER_KEY.to_string(),
-            consumer_secret: CONSUMER_SECRET.to_string(),
+            consumer_key: oauth_credential_from_env(
+                "REEKNOTE_EVERNOTE_CONSUMER_KEY",
+                "REEKNOTE_CONSUMER_KEY",
+                CONSUMER_KEY,
+            ),
+            consumer_secret: oauth_credential_from_env(
+                "REEKNOTE_EVERNOTE_CONSUMER_SECRET",
+                "REEKNOTE_CONSUMER_SECRET",
+                CONSUMER_SECRET,
+            ),
         }
     }
 
@@ -157,6 +166,14 @@ fn required_response_value(values: &BTreeMap<String, String>, key: &str) -> Resu
         .ok_or_else(|| ReeknoteError::External(format!("OAuth response did not contain {key}")))
 }
 
+fn oauth_credential_from_env(primary: &str, fallback: &str, default: &str) -> String {
+    env::var(primary)
+        .or_else(|_| env::var(fallback))
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| default.to_string())
+}
+
 fn plaintext_signature(consumer_secret: &str, token_secret: &str) -> String {
     format!(
         "{}&{}",
@@ -264,6 +281,22 @@ mod tests {
         assert_eq!(
             plaintext_signature("secret value", "tok+sec"),
             "secret%20value&tok%2Bsec"
+        );
+    }
+
+    #[test]
+    fn reads_oauth_credentials_from_env_values() {
+        assert_eq!(
+            oauth_credential_from_env("PATH", "REEKNOTE_MISSING_TEST_KEY", "default"),
+            env::var("PATH").unwrap()
+        );
+        assert_eq!(
+            oauth_credential_from_env(
+                "REEKNOTE_MISSING_TEST_KEY",
+                "REEKNOTE_MISSING_TEST_SECRET",
+                "default"
+            ),
+            "default"
         );
     }
 }

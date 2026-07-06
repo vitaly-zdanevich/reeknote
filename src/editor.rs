@@ -37,6 +37,8 @@ pub struct ImageInfo {
 pub struct ImageOptions {
     pub save_images: bool,
     pub images_in_subdir: bool,
+    pub save_attachments: bool,
+    pub attachments_in_subdir: bool,
     pub base_filename: Option<String>,
 }
 
@@ -130,6 +132,15 @@ pub fn enml_to_text_with_options(
     enml_to_text_internal(content_enml, format, image_options, &[], false, false)
 }
 
+pub fn enml_to_text_with_options_and_resources(
+    content_enml: &str,
+    format: TextFormat,
+    image_options: &ImageOptions,
+    resources: &[Resource],
+) -> String {
+    enml_to_text_internal(content_enml, format, image_options, resources, false, false)
+}
+
 fn enml_to_text_internal(
     content_enml: &str,
     format: TextFormat,
@@ -148,8 +159,13 @@ fn enml_to_text_internal(
         }
     }
 
-    if image_options.save_images {
-        body = replace_media_with_images(&body, image_options, format == TextFormat::Html);
+    if image_options.save_images || image_options.save_attachments {
+        body = replace_media_with_saved_resources(
+            &body,
+            image_options,
+            resources,
+            format == TextFormat::Html,
+        );
     } else if render_images && format != TextFormat::Html {
         body = replace_media_with_terminal_images(&body, resources);
     } else if format != TextFormat::Html {
@@ -1096,7 +1112,12 @@ fn convert_todos_to_markdown(content: &str) -> String {
     output.replace("<en-todo />", "* [ ]")
 }
 
-fn replace_media_with_images(content: &str, image_options: &ImageOptions, html: bool) -> String {
+fn replace_media_with_saved_resources(
+    content: &str,
+    image_options: &ImageOptions,
+    resources: &[Resource],
+    html: bool,
+) -> String {
     let mut output = String::new();
     let mut rest = content;
 
@@ -1116,17 +1137,33 @@ fn replace_media_with_images(content: &str, image_options: &ImageOptions, html: 
             attr_value(tag, "hash"),
             image_options.base_filename.as_ref(),
         ) {
-            if let Some(extension) = media_type.strip_prefix("image/") {
-                let extension = match extension {
-                    "svg+xml" => "svg",
-                    "jpeg" => "jpg",
-                    value => value,
-                };
-                let source = format!("{base_filename}-{hash}.{extension}");
+            let resource = resources
+                .iter()
+                .find(|resource| resource.data.body_hash == hash);
+            if media_type.starts_with("image/") {
+                let source = saved_media_source(base_filename, &hash, &media_type, resource, true);
                 if html {
-                    output.push_str(&format!("<img src=\"{source}\">"));
+                    output.push_str(&format!("<img src=\"{}\">", html_escape_tag(&source)));
                 } else {
                     output.push_str(&format!("![image]({source})"));
+                }
+                continue;
+            }
+            if image_options.save_attachments {
+                let source = saved_media_source(base_filename, &hash, &media_type, resource, false);
+                let filename = resource
+                    .and_then(|resource| {
+                        (!resource.filename.is_empty()).then(|| resource.filename.clone())
+                    })
+                    .unwrap_or_else(|| media_filename(Some(&media_type), Some(&hash), resources));
+                if html {
+                    output.push_str(&format!(
+                        "<a href=\"{}\">Attachment: {}</a>",
+                        html_escape_tag(&source),
+                        html_escape_tag(&filename)
+                    ));
+                } else {
+                    output.push_str(&format!("[Attachment: {filename}]({source})"));
                 }
                 continue;
             }
@@ -1137,6 +1174,57 @@ fn replace_media_with_images(content: &str, image_options: &ImageOptions, html: 
     }
     output.push_str(rest);
     output
+}
+
+fn saved_media_source(
+    base_filename: &str,
+    hash: &str,
+    media_type: &str,
+    resource: Option<&Resource>,
+    image: bool,
+) -> String {
+    if image {
+        let extension = image_extension(media_type).unwrap_or("bin");
+        return format!("{base_filename}-{hash}.{extension}");
+    }
+
+    if let Some(filename) = resource
+        .and_then(|resource| (!resource.filename.is_empty()).then(|| resource.filename.clone()))
+    {
+        return format!(
+            "{base_filename}-{hash}-{}",
+            escape_saved_filename(&filename)
+        );
+    }
+
+    if let Some(extension) = attachment_extension(media_type) {
+        return format!("{base_filename}-{hash}.{extension}");
+    }
+
+    format!("{base_filename}-{hash}")
+}
+
+fn escape_saved_filename(value: &str) -> String {
+    value
+        .replace(std::path::MAIN_SEPARATOR, "-")
+        .replace(['/', '\\'], "-")
+}
+
+fn image_extension(media_type: &str) -> Option<&str> {
+    match media_type {
+        "image/jpeg" => Some("jpg"),
+        "image/svg+xml" => Some("svg"),
+        value => value.strip_prefix("image/"),
+    }
+}
+
+fn attachment_extension(media_type: &str) -> Option<&str> {
+    match media_type {
+        "application/pdf" => Some("pdf"),
+        "audio/mpeg" => Some("mp3"),
+        "text/plain" => Some("txt"),
+        value => value.rsplit_once('/').map(|(_, extension)| extension),
+    }
 }
 
 fn replace_media_with_terminal_images(content: &str, resources: &[Resource]) -> String {
