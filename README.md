@@ -318,6 +318,10 @@ REEKNOTE_EVERNOTE_CONSUMER_SECRET=... \
 reeknote login
 ```
 
+For browser flows that need a visible verifier redirect, set
+`REEKNOTE_EVERNOTE_OAUTH_CALLBACK`, for example
+`REEKNOTE_EVERNOTE_OAUTH_CALLBACK=nnoauth`.
+
 After authorization, you can start to work with Evernote.
 
 ### Logging Out And Changing Users
@@ -917,3 +921,4 @@ rnsync --path ~/evernote-backup --all --format html --save-images --images-in-su
 * [CLInote: CLI, written in Go](https://github.com/TcM1911/clinote)
 * [Telegram self-hosted bot, read-only](https://gitlab.com/vitaly-zdanevich/bot_telegram_evernote)
 * [userstyle black and minimal](https://gitlab.com/vitaly-zdanevich-styles/evernote)
+* [Evernote PWA: view and edit the latest notes in an installable offline-capable web app](https://github.com/vitaly-zdanevich/evernote-pwa)
