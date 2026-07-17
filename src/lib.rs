@@ -11,4 +11,4 @@ pub mod rnsync;
 pub mod storage;
 pub mod tools;
 
-pub const VERSION: &str = "3.0.25";
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

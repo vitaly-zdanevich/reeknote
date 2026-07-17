@@ -45,9 +45,7 @@ pub fn with_terminal_animation<T>(message: &str, enabled: bool, action: impl FnO
 }
 
 pub fn about() -> String {
-    format!(
-        "Version: {VERSION}\nReeknote - a command line client for Evernote.\nUse reeknote --help to read documentation.\n"
-    )
+    format!("Reeknote {VERSION}\nCommand-line Evernote client.\nRun reeknote --help for usage.\n")
 }
 
 pub fn separator(symbol: char, title: &str) -> String {
@@ -389,8 +387,8 @@ mod tests {
 
     #[test]
     fn formats_about() {
-        assert!(about().contains("Version: 3.0.25"));
-        assert!(about().contains("Use reeknote --help"));
+        assert!(about().contains(&format!("Reeknote {}", crate::VERSION)));
+        assert!(about().contains("Run reeknote --help"));
     }
 
     #[test]

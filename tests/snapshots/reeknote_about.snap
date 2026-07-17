@@ -1,6 +1,6 @@
 status: 0
 --- stdout ---
-Version: 3.0.25
-Reeknote - a command line client for Evernote.
-Use reeknote --help to read documentation.
+Reeknote 0.9.0
+Command-line Evernote client.
+Run reeknote --help for usage.
 --- stderr ---
