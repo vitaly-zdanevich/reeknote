@@ -30,7 +30,7 @@ jobs:
         run: |
           tag="$RELEASE_TAG"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_TAG }}
       - name: Check Cargo version
@@ -44,14 +44,14 @@ jobs:
     env:
       RELEASE_TAG: ${{ needs.validate.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_TAG }}
       - name: Build source archive
         run: |
           git archive --format=tar.gz --prefix="reeknote-$RELEASE_TAG/" -o "reeknote-$RELEASE_TAG.tar.gz" HEAD
           sha256sum "reeknote-$RELEASE_TAG.tar.gz" > "reeknote-$RELEASE_TAG.tar.gz.sha256"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: source
           path: |
@@ -62,7 +62,7 @@ jobs:
     needs: validate
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.tag }}
       - name: Install Rust
@@ -73,7 +73,7 @@ jobs:
       - run: |
           tar -tzf vendor.tar.gz .cargo/config.toml >/dev/null
           tar -tzf vendor.tar.gz vendor >/dev/null
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: vendor
           path: |
@@ -94,7 +94,7 @@ jobs:
             artifact_name: reeknote-linux-aarch64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.tag }}
       - name: Install Rust
@@ -102,7 +102,7 @@ jobs:
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
           rustup default "$RUST_TOOLCHAIN"
           rustup target add "${{ matrix.rust_target }}"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/git
@@ -116,7 +116,7 @@ jobs:
           cp "target/${{ matrix.rust_target }}/release/rnsync" dist/
           tar -C dist -czf "${{ matrix.artifact_name }}.tar.gz" reeknote rnsync
           sha256sum "${{ matrix.artifact_name }}.tar.gz" > "${{ matrix.artifact_name }}.tar.gz.sha256"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.artifact_name }}
           path: |
@@ -170,7 +170,7 @@ jobs:
           --platform-tag "${{ matrix.platform_tag }}"
           --summary "${{ matrix.summary }}"
           --out dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pypi-${{ matrix.package }}-${{ matrix.platform_tag }}
           path: dist/*.whl
@@ -187,16 +187,16 @@ jobs:
             artifact_suffix: rnsync
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.tag }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - run: |
           mkdir -p npm-dist
           npm pack "./${{ matrix.package_dir }}" --pack-destination npm-dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: npm-source-${{ matrix.artifact_suffix }}
           path: npm-dist/*.tgz
@@ -231,13 +231,13 @@ jobs:
             binary: rnsync
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.tag }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.linux_artifact }}
           path: .
@@ -246,7 +246,7 @@ jobs:
           tar -xzf "${{ matrix.tarball }}" -C unpack
           cp "unpack/${{ matrix.binary }}" "${{ matrix.package_dir }}/bin/${{ matrix.binary }}"
           npm pack "./${{ matrix.package_dir }}" --pack-destination npm-dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: npm-binary-${{ matrix.artifact_suffix }}
           path: npm-dist/*.tgz
@@ -269,15 +269,15 @@ jobs:
     env:
       RELEASE_TAG: ${{ needs.validate.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_TAG }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.linux_artifact }}
           path: .
       - run: bash tools/build_deb.sh "$RELEASE_TAG" "${{ matrix.deb_arch }}" "${{ matrix.tarball }}" deb-dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: deb-${{ matrix.deb_arch }}
           path: deb-dist/*
@@ -307,7 +307,7 @@ jobs:
           git fetch --depth=1 origin "refs/tags/$RELEASE_TAG"
           git checkout --detach FETCH_HEAD
       - run: bash tools/build_rpm.sh "$RELEASE_TAG" rpm-dist "${{ matrix.srpm_mode }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rpm-${{ runner.arch }}
           path: rpm-dist/*
@@ -331,7 +331,7 @@ jobs:
           git fetch --depth=1 origin "refs/tags/$RELEASE_TAG"
           git checkout --detach FETCH_HEAD
       - run: bash tools/build_obs_package.sh "$RELEASE_TAG" obs-dist build-rpm
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: obs
           path: |
@@ -358,7 +358,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: release-assets
           merge-multiple: true

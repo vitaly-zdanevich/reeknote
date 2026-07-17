@@ -19,7 +19,7 @@ jobs:
   fmt:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt
@@ -29,12 +29,12 @@ jobs:
   clippy:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy
           rustup default "$RUST_TOOLCHAIN"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/git
@@ -45,12 +45,12 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
           rustup default "$RUST_TOOLCHAIN"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/git
@@ -61,7 +61,7 @@ jobs:
   vendor:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
@@ -70,7 +70,7 @@ jobs:
       - run: |
           tar -tzf vendor.tar.gz .cargo/config.toml >/dev/null
           tar -tzf vendor.tar.gz vendor >/dev/null
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: vendor
           path: |
@@ -90,13 +90,13 @@ jobs:
             artifact_name: reeknote-linux-aarch64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
           rustup default "$RUST_TOOLCHAIN"
           rustup target add "${{ matrix.rust_target }}"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/git
@@ -110,7 +110,7 @@ jobs:
           cp "target/${{ matrix.rust_target }}/release/rnsync" dist/
           tar -C dist -czf "${{ matrix.artifact_name }}.tar.gz" reeknote rnsync
           sha256sum "${{ matrix.artifact_name }}.tar.gz" > "${{ matrix.artifact_name }}.tar.gz.sha256"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.artifact_name }}
           path: |
@@ -122,7 +122,7 @@ jobs:
     env:
       NIX_CONFIG: experimental-features = nix-command flakes
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Nix
         run: |
           curl --fail --location https://nixos.org/nix/install | sh -s -- --no-daemon

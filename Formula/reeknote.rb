@@ -2,8 +2,8 @@ class Reeknote < Formula
   desc "Command-line Evernote client"
   homepage "https://github.com/vitaly-zdanevich/reeknote"
   url "https://github.com/vitaly-zdanevich/reeknote.git",
-      tag: "0.9.0"
-  version "0.9.0"
+      tag: "0.9.2"
+  version "0.9.2"
   license "GPL-3.0-only"
   head "https://github.com/vitaly-zdanevich/reeknote.git", branch: "master"
 
@@ -23,7 +23,7 @@ class Reeknote < Formula
   end
 
   test do
-    assert_match "Reeknote - a command line client for Evernote.", shell_output("#{bin}/reeknote")
+    assert_match "Command-line Evernote client.", shell_output("#{bin}/reeknote")
     assert_match "Usage: rnsync", shell_output("#{bin}/rnsync --help")
   end
 end
