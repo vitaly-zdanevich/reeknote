@@ -367,7 +367,7 @@ for the application name, use `reeknote`.
 $ reeknote settings
 Reeknote
 ******************************
-Version: 0.9.0
+Version: 0.9.1
 App dir: /home/username/.reeknote
 Error log: /home/username/.reeknote/error.log
 Editor: nano

@@ -2,7 +2,7 @@ status: 0
 --- stdout ---
 Reeknote
 ******************************
-Version: 0.9.0
+Version: 0.9.1
 App dir: <APP_DIR>
 Error log: <APP_DIR>/error.log
 Editor: nano
