@@ -157,6 +157,7 @@ jobs:
     steps:
       - name: Checkout
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git init .
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "refs/tags/$RELEASE_TAG"
@@ -302,6 +303,7 @@ jobs:
         run: dnf install --assumeyes cargo findutils gcc git gzip rpm-build rust tar
       - name: Checkout
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git init .
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "refs/tags/$RELEASE_TAG"
@@ -326,6 +328,7 @@ jobs:
           zypper --non-interactive install ca-certificates cargo findutils gcc git gzip rpm-build rust tar
       - name: Checkout
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git init .
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "refs/tags/$RELEASE_TAG"
@@ -349,9 +352,12 @@ jobs:
       - source
       - vendor
       - build-linux
+      - build-pypi
       - package-npm-source
       - package-npm-binary
       - package-deb
+      - package-rpm
+      - package-obs
     runs-on: ubuntu-24.04
     env:
       RELEASE_TAG: ${{ needs.validate.outputs.tag }}
