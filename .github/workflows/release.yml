@@ -151,30 +151,36 @@ jobs:
             platform_tag: manylinux_2_17_aarch64
             summary: Evernote note synchronization CLI
     runs-on: ${{ matrix.runner }}
-    container: ghcr.io/pyo3/maturin:v1.12.6
     env:
       RELEASE_TAG: ${{ needs.validate.outputs.tag }}
     steps:
-      - name: Checkout
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Build wheel in manylinux container
+        env:
+          PACKAGE: ${{ matrix.package }}
+          BINARY: ${{ matrix.binary }}
+          PLATFORM_TAG: ${{ matrix.platform_tag }}
+          SUMMARY: ${{ matrix.summary }}
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth=1 origin "refs/tags/$RELEASE_TAG"
-          git checkout --detach FETCH_HEAD
-      - name: Install Rust
-        run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
-          rustup default "$RUST_TOOLCHAIN"
-      - run: cargo build --release --locked --bin "${{ matrix.binary }}"
-      - run: >
-          python3 tools/build_cli_wheel.py
-          --package "${{ matrix.package }}"
-          --command "${{ matrix.binary }}"
-          --binary "target/release/${{ matrix.binary }}"
-          --platform-tag "${{ matrix.platform_tag }}"
-          --summary "${{ matrix.summary }}"
-          --out dist
+          docker run --rm \
+            -e CARGO_TERM_COLOR \
+            -e RUST_TOOLCHAIN \
+            -e PACKAGE \
+            -e BINARY \
+            -e PLATFORM_TAG \
+            -e SUMMARY \
+            -v "$PWD:/work" \
+            -w /work \
+            ghcr.io/pyo3/maturin:v1.12.6 \
+            sh -euxc '
+              git config --global --add safe.directory /work
+              rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+              rustup default "$RUST_TOOLCHAIN"
+              cargo build --release --locked --bin "$BINARY"
+              python3 tools/build_cli_wheel.py --package "$PACKAGE" --command "$BINARY" --binary "target/release/$BINARY" --platform-tag "$PLATFORM_TAG" --summary "$SUMMARY" --out dist
+            '
       - uses: actions/upload-artifact@v7
         with:
           name: pypi-${{ matrix.package }}-${{ matrix.platform_tag }}
