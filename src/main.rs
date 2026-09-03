@@ -128,18 +128,37 @@ fn handle_login(storage: &mut Storage, config: &Config) -> Result<()> {
 
 fn oauth_login(config: &Config) -> Result<String> {
     let oauth = OAuthClient::new(config);
-    let callback = format!("https://{}", config.user_base_url);
+    let callback = oauth_callback(config);
     let request_token = oauth.request_token(&callback)?;
-    println!(
-        "Open this URL in your browser and approve access:\n{}",
-        oauth.authorization_url(&request_token.token)
-    );
+    let authorization_url = oauth.authorization_url(&request_token.token);
+    print!("{}", oauth_authorization_message(&authorization_url));
     print!("Paste the oauth_verifier or final redirected URL: ");
     io::stdout().flush()?;
     let mut verifier = String::new();
     io::stdin().read_line(&mut verifier)?;
     let access_token = oauth.access_token(&request_token, &verifier)?;
     Ok(access_token.token)
+}
+
+/// Formats the OAuth browser prompt with the approval URL isolated for copying.
+fn oauth_authorization_message(url: &str) -> String {
+    format!("Open this URL in your browser and approve access:\n\n{url}\n\n")
+}
+
+/// Returns the OAuth callback URL requested from Evernote.
+fn oauth_callback(config: &Config) -> String {
+    oauth_callback_with_env(config, |key| env::var(key))
+}
+
+fn oauth_callback_with_env(
+    config: &Config,
+    lookup: impl Fn(&str) -> std::result::Result<String, env::VarError>,
+) -> String {
+    lookup("REEKNOTE_EVERNOTE_OAUTH_CALLBACK")
+        .or_else(|_| lookup("REEKNOTE_OAUTH_CALLBACK"))
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| format!("https://{}", config.user_base_url))
 }
 
 fn handle_logout(storage: &mut Storage, values: ParsedArgs) -> Result<()> {
@@ -1622,6 +1641,50 @@ mod tests {
     fn rejects_invalid_note_selection() {
         assert!(parse_note_selection("4", 3).is_err());
         assert!(parse_note_selection("abc", 3).is_err());
+    }
+
+    #[test]
+    fn formats_oauth_authorization_url_on_its_own_line() {
+        assert_eq!(
+            oauth_authorization_message("https://www.evernote.com/OAuth.action?oauth_token=tmp"),
+            "Open this URL in your browser and approve access:\n\nhttps://www.evernote.com/OAuth.action?oauth_token=tmp\n\n"
+        );
+    }
+
+    #[test]
+    fn uses_default_oauth_callback() {
+        let config = Config::load();
+
+        assert_eq!(
+            oauth_callback_with_env(&config, |_| Err(env::VarError::NotPresent)),
+            format!("https://{}", config.user_base_url)
+        );
+    }
+
+    #[test]
+    fn uses_env_oauth_callback() {
+        let config = Config::load();
+
+        assert_eq!(
+            oauth_callback_with_env(&config, |key| match key {
+                "REEKNOTE_EVERNOTE_OAUTH_CALLBACK" => Ok("nnoauth".to_string()),
+                _ => Err(env::VarError::NotPresent),
+            }),
+            "nnoauth"
+        );
+    }
+
+    #[test]
+    fn ignores_empty_env_oauth_callback() {
+        let config = Config::load();
+
+        assert_eq!(
+            oauth_callback_with_env(&config, |key| match key {
+                "REEKNOTE_EVERNOTE_OAUTH_CALLBACK" => Ok(" ".to_string()),
+                _ => Err(env::VarError::NotPresent),
+            }),
+            format!("https://{}", config.user_base_url)
+        );
     }
 
     #[test]
