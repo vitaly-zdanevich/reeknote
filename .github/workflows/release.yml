@@ -173,8 +173,9 @@ jobs:
             -e SUMMARY \
             -v "$PWD:/work" \
             -w /work \
+            --entrypoint sh \
             ghcr.io/pyo3/maturin:v1.12.6 \
-            sh -euxc '
+            -euxc '
               git config --global --add safe.directory /work
               rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
               rustup default "$RUST_TOOLCHAIN"
