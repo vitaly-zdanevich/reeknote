@@ -162,6 +162,10 @@ jobs:
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "refs/tags/$RELEASE_TAG"
           git checkout --detach FETCH_HEAD
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
       - run: cargo build --release --locked --bin "${{ matrix.binary }}"
       - run: >
           python3 tools/build_cli_wheel.py
