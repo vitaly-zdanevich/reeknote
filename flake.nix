@@ -2,7 +2,8 @@
   description = "Command-line Evernote client";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+		# Includes the direct-CDN crate downloader, avoiding crates.io API 403s.
+		nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   };
 
   outputs =
