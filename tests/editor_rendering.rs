@@ -103,6 +103,70 @@ fn converts_div_blocks_to_paragraphs() {
     );
 }
 
+/// Reproduce issue #5 with the ENML fetched from the reported test note.
+#[test]
+fn preserves_evernote_blank_lines_in_terminal_output() {
+    let note = concat!(
+        "<!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\">",
+        "<en-note><div>My first line</div>",
+        "<div><br/></div><div><br/></div><div><br/></div>",
+        "<div>My second line</div></en-note>",
+    );
+    assert_eq!(
+        enml_to_terminal_text(note),
+        "My first line\n\n\n\nMy second line\n\n",
+    );
+}
+
+/// Keep explicit blank lines in editable Markdown and plain-text exports too.
+#[test]
+fn preserves_evernote_blank_lines_in_text_output() {
+    let note = wrap_enml(concat!(
+        "<div>My first line</div>",
+        "<div><br/></div><div><br/></div><div><br/></div>",
+        "<div>My second line</div>",
+    ));
+    let expected = "My first line\n\n\n\nMy second line\n\n";
+    assert_eq!(enml_to_text(&note), expected);
+    assert_eq!(
+        enml_to_text_with_options(&note, TextFormat::Plain, &ImageOptions::default()),
+        expected,
+    );
+}
+
+/// Source line endings must not add to the number of explicitly empty blocks.
+#[test]
+fn preserves_evernote_blank_lines_without_adding_paragraph_spacing() {
+    for line_break in ["<br/>", "<br />", "<br>"] {
+        for separator in ["", "\n", "\r\n"] {
+            for blank_lines in 1..=3 {
+                let gap = format!("<div>{line_break}</div>{separator}").repeat(blank_lines);
+                let note = wrap_enml(&format!(
+                    "<div>Before</div>{separator}{gap}<div>After</div>",
+                ));
+                let expected = format!("Before{}After\n\n", "\n".repeat(blank_lines + 1));
+                assert_eq!(enml_to_text(&note), expected, "ENML: {note}");
+                assert_eq!(enml_to_terminal_text(&note), expected, "ENML: {note}");
+            }
+        }
+    }
+}
+
+/// Explicit empty blocks remain significant even without text on both sides.
+#[test]
+fn preserves_evernote_blank_lines_at_note_boundaries() {
+    let blank_lines = "<div><br/></div>".repeat(3);
+    for (html, expected) in [
+        (format!("{blank_lines}<div>After</div>"), "\n\n\nAfter\n\n"),
+        (format!("<div>Before</div>{blank_lines}"), "Before\n\n\n\n"),
+        (blank_lines, "\n\n\n"),
+    ] {
+        let note = wrap_enml(&html);
+        assert_eq!(enml_to_text(&note), expected, "ENML: {note}");
+        assert_eq!(enml_to_terminal_text(&note), expected, "ENML: {note}");
+    }
+}
+
 #[test]
 fn renders_horizontal_rules_as_text_separators() {
     let html = "<div>Before</div><hr/><div>After</div>";

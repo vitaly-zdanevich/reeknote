@@ -17,6 +17,9 @@ pub enum TextFormat {
 
 const HORIZONTAL_RULE: &str = "------------------------";
 
+/// Protects explicit empty blocks from whitespace cleanup; NUL is invalid in ENML.
+const EXPLICIT_BLANK_LINE: &str = "\0";
+
 impl TextFormat {
     pub fn from_extension(extension: &str) -> Option<Self> {
         match extension {
@@ -666,8 +669,8 @@ fn replace_paragraphs(content: &str) -> String {
 fn replace_divs(content: &str) -> String {
     replace_simple_tag(content, "div", |inner| {
         let text = inner.trim();
-        if text == "<br/>" || text == "<br />" {
-            "\n".to_string()
+        if matches!(text, "<br/>" | "<br />" | "<br>") {
+            format!("\n{EXPLICIT_BLANK_LINE}\n")
         } else if is_compact_div_text(text) {
             format!("{text}\n")
         } else {
@@ -1420,24 +1423,30 @@ fn strip_tags(content: &str) -> String {
     output
 }
 
+/// Collapses generated spacing while retaining the number of explicit empty blocks.
 fn normalize_blank_lines(content: &str) -> String {
     let content = content.replace("\r\n", "\n");
     let mut output = String::new();
-    let mut previous_blank = false;
+    let mut generated_blank_line = false;
+    let mut explicit_blank_lines: usize = 0;
 
     for line in content.lines() {
-        let blank = line.trim().is_empty();
-        if blank {
-            if !previous_blank {
-                output.push('\n');
-            }
+        if line.trim() == EXPLICIT_BLANK_LINE {
+            explicit_blank_lines += 1;
+        } else if line.trim().is_empty() {
+            generated_blank_line = true;
         } else {
+            let blank_lines = explicit_blank_lines.max(usize::from(generated_blank_line));
+            output.push_str(&"\n".repeat(blank_lines));
             output.push_str(line.trim_end());
             output.push('\n');
+            generated_blank_line = false;
+            explicit_blank_lines = 0;
         }
-        previous_blank = blank;
     }
 
+    let blank_lines = explicit_blank_lines.max(usize::from(generated_blank_line));
+    output.push_str(&"\n".repeat(blank_lines));
     if !output.ends_with('\n') {
         output.push('\n');
     }
