@@ -2,8 +2,8 @@ class Reeknote < Formula
   desc "Command-line Evernote client"
   homepage "https://github.com/vitaly-zdanevich/reeknote"
   url "https://github.com/vitaly-zdanevich/reeknote.git",
-      tag: "0.9.4"
-  version "0.9.4"
+      tag: "0.9.5"
+  version "0.9.5"
   license "GPL-3.0-only"
   head "https://github.com/vitaly-zdanevich/reeknote.git", branch: "master"
 

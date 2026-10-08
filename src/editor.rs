@@ -186,9 +186,7 @@ fn enml_to_text_internal(
     body = replace_bold_text(&body, terminal_styles);
     body = replace_links(&body, terminal_styles);
     body = convert_todos_to_markdown(&body);
-    body = replace_simple_tag(&body, "h1", |inner| format!("# {}\n\n", inner.trim()));
-    body = replace_simple_tag(&body, "h2", |inner| format!("## {}\n\n", inner.trim()));
-    body = replace_simple_tag(&body, "h3", |inner| format!("### {}\n\n", inner.trim()));
+    body = replace_headings(&body, terminal_styles);
     body = replace_paragraphs(&body);
     body = replace_divs(&body);
     body = body
@@ -653,6 +651,28 @@ where
     }
     output.push_str(rest);
     output
+}
+
+/// Render supported headings with attributes as styled text or editable Markdown.
+fn replace_headings(content: &str, terminal_styles: bool) -> String {
+    let mut content = content.to_string();
+    for (tag, prefix) in [("h1", "#"), ("h2", "##"), ("h3", "###")] {
+        content = replace_tag_blocks(
+            &content,
+            tag,
+            |_| true,
+            |inner| {
+                let text = inner.trim();
+                if terminal_styles {
+                    let text = text.replace("\x1b[0m", "\x1b[0m\x1b[1;33m");
+                    format!("\x1b[1;33m{text}\x1b[0m\n\n")
+                } else {
+                    format!("{prefix} {text}\n\n")
+                }
+            },
+        );
+    }
+    content
 }
 
 fn replace_paragraphs(content: &str) -> String {

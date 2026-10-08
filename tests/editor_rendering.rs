@@ -83,6 +83,70 @@ fn converts_enml_to_markdown() {
     assert_eq!(enml_to_text(&wrap_enml(HTML_TEXT)), MD_TEXT);
 }
 
+/// Reproduce issue #4 using the attributed heading from the updated test note.
+#[test]
+fn highlights_evernote_heading_on_its_own_line() {
+    let note = concat!(
+        "<!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\">",
+        "<en-note><h1 style=\"--en-nodeId:884eaf5b-6fa8-43b8-ad59-0125c7c289f0;\">",
+        "My header</h1><div>My second line</div></en-note>",
+    );
+    assert_eq!(
+        enml_to_terminal_text(note),
+        "\x1b[1;33mMy header\x1b[0m\n\nMy second line\n\n",
+    );
+    assert_eq!(enml_to_text(note), "# My header\n\nMy second line\n\n");
+}
+
+/// All supported heading levels retain their Markdown meaning and terminal style.
+#[test]
+fn renders_headings_with_and_without_attributes() {
+    for level in 1..=3 {
+        for attributes in ["", " style=\"--en-nodeId:heading;\"", " title='Heading'"] {
+            let note = wrap_enml(&format!(
+                "<div>Before</div><h{level}{attributes}><span>Git &lt;name&gt;</span></h{level}><div>After</div>",
+            ));
+            assert_eq!(
+                enml_to_text(&note),
+                format!("Before\n\n{} Git <name>\n\nAfter\n\n", "#".repeat(level)),
+            );
+            assert_eq!(
+                enml_to_terminal_text(&note),
+                "Before\n\n\x1b[1;33mGit <name>\x1b[0m\n\nAfter\n\n",
+            );
+        }
+    }
+}
+
+/// Inline style resets must restore heading styling without coloring following text.
+#[test]
+fn restores_heading_color_after_inline_formatting() {
+    let note = wrap_enml("<h1><i>Important</i> heading</h1><div>After</div>");
+    assert_eq!(
+        enml_to_terminal_text(&note),
+        "\x1b[1;33m\x1b[3mImportant\x1b[0m\x1b[1;33m heading\x1b[0m\n\nAfter\n\n",
+    );
+    assert_eq!(enml_to_text(&note), "# _Important_ heading\n\nAfter\n\n");
+}
+
+/// Heading spacing must not remove the explicit blank lines fixed in issue #5.
+#[test]
+fn preserves_explicit_blank_lines_around_headings() {
+    let note = wrap_enml(concat!(
+        "<div>Before</div><div><br/></div><div><br/></div><div><br/></div>",
+        "<h1 style=\"--en-nodeId:heading;\">Heading</h1>",
+        "<div><br/></div><div><br/></div><div>After</div>",
+    ));
+    assert_eq!(
+        enml_to_terminal_text(&note),
+        "Before\n\n\n\n\x1b[1;33mHeading\x1b[0m\n\n\nAfter\n\n",
+    );
+    assert_eq!(
+        enml_to_text(&note),
+        "Before\n\n\n\n# Heading\n\n\nAfter\n\n"
+    );
+}
+
 #[test]
 fn converts_task_lists() {
     let markdown = "\n* [ ]item 1\n\n* [x]item 2\n\n* [ ]item 3\n\n";
