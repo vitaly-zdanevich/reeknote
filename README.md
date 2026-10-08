@@ -130,15 +130,15 @@ FreeBSD ports tree yet and must be validated on FreeBSD before submission.
 
 ### Install on Gentoo Linux
 
-Reeknote can be installed from the `::gentoo-zh` overlay:
+Reeknote can be installed from my overlay:
 
-https://github.com/microcai/gentoo-zh/tree/master/app-doc/reeknote
+https://github.com/vitaly-zdanevich/gentoo-overlay/tree/master/app-doc/reeknote
 
 Enable and sync the overlay:
 
 ```sh
-sudo eselect repository enable gentoo-zh
-sudo emaint sync -r gentoo-zh
+eselect repository add vitaly-zdanevich-overlay git https://github.com/vitaly-zdanevich/gentoo-overlay.git
+emaint sync -r vitaly-zdanevich-overlay
 ```
 
 Then install Reeknote:
