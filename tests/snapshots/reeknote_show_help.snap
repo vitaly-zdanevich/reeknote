@@ -1,0 +1,9 @@
+status: 0
+--- stdout ---
+Options for: show
+Available arguments:
+    --note : [default] Note name, GUID, or previous search ID.
+Available flags:
+     --raw : Show raw note body.
+--with-url : Show note links and web URLs.
+--- stderr ---

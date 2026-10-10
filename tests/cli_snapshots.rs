@@ -22,6 +22,17 @@ fn reeknote_find_help_snapshot() {
     );
 }
 
+/// Keep the opt-in note-link flag discoverable in command-specific help.
+#[test]
+fn reeknote_show_help_snapshot() {
+    assert_cli_snapshot(
+        "reeknote_show_help",
+        reeknote_bin(),
+        &["show", "--help"],
+        None,
+    );
+}
+
 #[test]
 fn reeknote_settings_snapshot() {
     let app_dir = isolated_app_dir("settings");

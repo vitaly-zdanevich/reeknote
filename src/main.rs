@@ -300,6 +300,7 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
     let note_ref = required_string(&values, "note")?;
     let mut client = make_client(storage, config)?;
     let raw = arg_bool(&values, "raw");
+    let show_url = arg_bool(&values, "with_url");
     let animate = !raw;
     let animate_resolve = animate && note_ref_resolves_without_selection(storage, &note_ref);
     let mut note = if animate_resolve {
@@ -318,11 +319,13 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
 
         if !raw {
             hydrate_show_metadata(storage, &mut client, &mut note)?;
-            user = Some(
-                storage
-                    .get_user_info()
-                    .unwrap_or_else(|| client.get_user_info().unwrap_or_default()),
-            );
+            if show_url {
+                user = Some(
+                    storage
+                        .get_user_info()
+                        .unwrap_or_else(|| client.get_user_info().unwrap_or_default()),
+                );
+            }
         }
         Ok(())
     })?;
@@ -346,6 +349,7 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
                 out::ShowOptions {
                     terminal_styles,
                     render_images,
+                    show_url,
                 },
             )
         );

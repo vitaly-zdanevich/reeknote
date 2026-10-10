@@ -367,7 +367,7 @@ for the application name, use `reeknote`.
 $ reeknote settings
 Reeknote
 ******************************
-Version: 0.9.5
+Version: 0.10.0
 App dir: /home/username/.reeknote
 Error log: /home/username/.reeknote/error.log
 Editor: nano
@@ -617,7 +617,7 @@ opens them in `mpv`, and removes the temporary files after playback exits.
 Synopsis:
 
 ```sh
-reeknote show <text, GUID, or previous search result ID>
+reeknote show <text, GUID, or previous search result ID> [--with-url] [--raw]
 ```
 
 Examples:
@@ -641,9 +641,6 @@ Found 2 items
   2 : Gift Shopping List
 
 $ reeknote show 2
-################### URL ###################
-NoteLink: evernote:///view/111/s1/note-guid/note-guid/
-WebClientURL: https://www.evernote.com/shard/s1/nl/111/note-guid
 ################## TITLE ##################
 Gift Shopping List
 =================== META ==================
@@ -651,13 +648,18 @@ Notebook: Personal
 Tags: shopping, gifts
 Created: 2015-02-22
 Updated: 2015-02-24
-||||||||||||||| REMINDERS |||||||||||||||||
-Order: None
-Time: None
-Done: None
----------------- CONTENT -----------------
+----------------- CONTENT -----------------
 Coffee
 Chocolate
+```
+
+`Updated` is omitted when its displayed date matches `Created`. The reminder
+section is omitted when all reminder fields are unset. Note links are hidden
+by default; use `--with-url` (or `-wu`) to include both the note link and the
+web-client URL:
+
+```sh
+reeknote show 2 --with-url
 ```
 
 Raw ENML output:

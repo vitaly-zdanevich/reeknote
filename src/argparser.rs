@@ -608,7 +608,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
                     .alt("-n")
                     .required(),
             )
-            .flag(OptionSpec::flag("--raw", "Show raw note body.").alt("-w")),
+            .flag(OptionSpec::flag("--raw", "Show raw note body.").alt("-w"))
+            .flag(OptionSpec::flag("--with-url", "Show note links and web URLs.").alt("-wu")),
         CommandSpec::new("remove", "Remove note from Evernote.")
             .first_arg("--note")
             .argument(
@@ -793,5 +794,32 @@ mod tests {
             panic!("expected parsed values");
         };
         assert_eq!(values.get("content"), Some(&ArgValue::Bool(true)));
+    }
+
+    /// URL output is opt-in, accepts the existing short alias, and keeps raw mode.
+    #[test]
+    fn parses_show_url_flag() {
+        for (args, with_url, raw) in [
+            (vec!["show", "note-guid"], false, false),
+            (vec!["show", "note-guid", "--with-url"], true, false),
+            (vec!["show", "note-guid", "-wu"], true, false),
+            (
+                vec!["show", "--with-url", "--note", "note-guid"],
+                true,
+                false,
+            ),
+            (vec!["show", "note-guid", "--raw", "--with-url"], true, true),
+        ] {
+            let outcome = ArgParser::default().parse(args).unwrap();
+            let ParseOutcome::Parsed(values) = outcome else {
+                panic!("expected parsed values");
+            };
+            assert_eq!(values.get("with_url"), Some(&ArgValue::Bool(with_url)));
+            assert_eq!(values.get("raw"), Some(&ArgValue::Bool(raw)));
+            assert_eq!(
+                values.get("note"),
+                Some(&ArgValue::String("note-guid".to_string()))
+            );
+        }
     }
 }

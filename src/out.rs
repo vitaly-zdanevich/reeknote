@@ -19,10 +19,13 @@ pub struct ListOptions {
     pub show_guid: bool,
 }
 
+/// Presentation settings for note output; note links are hidden by default.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ShowOptions {
     pub terminal_styles: bool,
     pub render_images: bool,
+    /// Include the note-link and web-client URL block.
+    pub show_url: bool,
 }
 
 pub fn print_line(line: &str) {
@@ -103,10 +106,12 @@ pub fn show_user(user: &UserInfo, full_info: bool) -> String {
     output
 }
 
+/// Format a note without redundant dates, empty reminders, or the URL block.
 pub fn show_note(note: &Note, user_id: i64, shard_id: &str, config: &Config) -> String {
     show_note_with_options(note, user_id, shard_id, config, ShowOptions::default())
 }
 
+/// Format compact note metadata with optional links and terminal styling.
 pub fn show_note_with_options(
     note: &Note,
     user_id: i64,
@@ -114,17 +119,20 @@ pub fn show_note_with_options(
     config: &Config,
     options: ShowOptions,
 ) -> String {
-    let mut output = separator('#', "URL");
-    let note_link = config
-        .note_link
-        .replacen("%s", shard_id, 1)
-        .replacen("%s", &user_id.to_string(), 1)
-        .replacen("%s", &note.guid, 1);
-    output.push_str(&format!("NoteLink: {note_link}\n"));
-    output.push_str(&format!(
-        "WebClientURL: {}\n",
-        config.note_webclient_url.replace("%s", &note.guid)
-    ));
+    let mut output = String::new();
+    if options.show_url {
+        output.push_str(&separator('#', "URL"));
+        let note_link = config
+            .note_link
+            .replacen("%s", shard_id, 1)
+            .replacen("%s", &user_id.to_string(), 1)
+            .replacen("%s", &note.guid, 1);
+        output.push_str(&format!("NoteLink: {note_link}\n"));
+        output.push_str(&format!(
+            "WebClientURL: {}\n",
+            config.note_webclient_url.replace("%s", &note.guid)
+        ));
+    }
     output.push_str(&separator('#', "TITLE"));
     output.push_str(&format!("{}\n", note.title));
     output.push_str(&separator('=', "META"));
@@ -135,24 +143,33 @@ pub fn show_note_with_options(
     if !note.tag_names.is_empty() {
         output.push_str(&format!("Tags: {}\n", note.tag_names.join(", ")));
     }
-    output.push_str(&format!("Created: {}\n", print_date(note.created)));
-    output.push_str(&format!("Updated: {}\n", print_date(note.updated)));
+    let created = print_date(note.created);
+    let updated = print_date(note.updated);
+    output.push_str(&format!("Created: {created}\n"));
+    if updated != created {
+        output.push_str(&format!("Updated: {updated}\n"));
+    }
     if let Some(source_url) = &note.attributes.source_url {
         output.push_str(&format!("sourceURL: {source_url}\n"));
     }
-    output.push_str(&separator('|', "REMINDERS"));
-    output.push_str(&format!(
-        "Order: {}\n",
-        option_i64(note.attributes.reminder_order)
-    ));
-    output.push_str(&format!(
-        "Time: {}\n",
-        print_date(note.attributes.reminder_time)
-    ));
-    output.push_str(&format!(
-        "Done: {}\n",
-        print_date(note.attributes.reminder_done_time)
-    ));
+    if note.attributes.reminder_order.is_some()
+        || note.attributes.reminder_time.is_some()
+        || note.attributes.reminder_done_time.is_some()
+    {
+        output.push_str(&separator('|', "REMINDERS"));
+        output.push_str(&format!(
+            "Order: {}\n",
+            option_i64(note.attributes.reminder_order)
+        ));
+        output.push_str(&format!(
+            "Time: {}\n",
+            print_date(note.attributes.reminder_time)
+        ));
+        output.push_str(&format!(
+            "Done: {}\n",
+            print_date(note.attributes.reminder_done_time)
+        ));
+    }
     output.push_str(&separator('-', "CONTENT"));
     if options.terminal_styles {
         output.push_str(&editor::enml_to_terminal_text_with_options(
@@ -458,6 +475,147 @@ mod tests {
         assert!(output.contains("Tags: tag-one, tag-two"));
         assert!(output.find("Notebook:").unwrap() < output.find("Tags:").unwrap());
         assert!(output.find("Tags:").unwrap() < output.find("Created:").unwrap());
+    }
+
+    /// Issue #1: ordinary notes should not include redundant metadata blocks.
+    #[test]
+    fn shows_compact_note_by_default() {
+        let note = Note {
+            title: "My title".to_string(),
+            content: editor::text_to_enml("body"),
+            notebook_name: Some("INBOX".to_string()),
+            created: Some(1_790_208_000_000),
+            updated: Some(1_790_208_000_000),
+            ..Note::default()
+        };
+        let output = show_note(&note, 111, "s1", &test_config());
+        assert_eq!(
+            output,
+            format!(
+                "{}My title\n{}Notebook: INBOX\nCreated: {}\n{}body\n\n",
+                separator('#', "TITLE"),
+                separator('=', "META"),
+                print_date(note.created),
+                separator('-', "CONTENT"),
+            )
+        );
+    }
+
+    /// Compare visible dates, even when the underlying timestamps differ.
+    #[test]
+    fn hides_updated_when_displayed_dates_match() {
+        for (created, updated) in [
+            (Some(1_790_208_000_000), Some(1_790_208_000_000)),
+            (Some(1_790_208_000_000), Some(1_790_208_001_000)),
+            (None, None),
+        ] {
+            let note = Note {
+                created,
+                updated,
+                ..Note::default()
+            };
+            let output = show_note(&note, 111, "s1", &test_config());
+            assert!(output.contains(&format!("Created: {}\n", print_date(created))));
+            assert!(!output.contains("Updated:"), "{output}");
+        }
+    }
+
+    /// Preserve different update dates and the existing missing-date representation.
+    #[test]
+    fn keeps_updated_when_displayed_dates_differ() {
+        for (created, updated) in [
+            (Some(1_790_208_000_000), Some(1_790_294_400_000)),
+            (None, Some(1_790_208_000_000)),
+            (Some(1_790_208_000_000), None),
+        ] {
+            let note = Note {
+                created,
+                updated,
+                ..Note::default()
+            };
+            let output = show_note(&note, 111, "s1", &test_config());
+            assert!(output.contains(&format!("Created: {}\n", print_date(created))));
+            assert!(output.contains(&format!("Updated: {}\n", print_date(updated))));
+        }
+    }
+
+    /// Hide the whole reminder section only when all three fields are absent.
+    #[test]
+    fn shows_reminders_when_any_field_is_set() {
+        for fields in 0..8 {
+            let note = Note {
+                attributes: NoteAttributes {
+                    reminder_order: (fields & 1 != 0).then_some(0),
+                    reminder_time: (fields & 2 != 0).then_some(1_790_208_000_000),
+                    reminder_done_time: (fields & 4 != 0).then_some(1_790_294_400_000),
+                    ..NoteAttributes::default()
+                },
+                ..Note::default()
+            };
+            let output = show_note(&note, 111, "s1", &test_config());
+            assert_eq!(output.contains(&separator('|', "REMINDERS")), fields != 0);
+            for label in ["Order:", "Time:", "Done:"] {
+                assert_eq!(output.contains(label), fields != 0);
+            }
+            if fields != 0 {
+                assert!(output.contains(&format!(
+                    "Order: {}\n",
+                    option_i64(note.attributes.reminder_order)
+                )));
+                assert!(output.contains(&format!(
+                    "Time: {}\n",
+                    print_date(note.attributes.reminder_time)
+                )));
+                assert!(output.contains(&format!(
+                    "Done: {}\n",
+                    print_date(note.attributes.reminder_done_time)
+                )));
+            }
+        }
+    }
+
+    /// Enabling note links must not affect the body or hide a note's source URL.
+    #[test]
+    fn shows_configured_note_links_only_when_requested() {
+        let mut config = test_config();
+        config.note_link = "https://notes.example/shard/%s/nl/%s/%s".to_string();
+        config.note_webclient_url = "https://notes.example/note/%s".to_string();
+        let note = Note {
+            guid: "note-guid".to_string(),
+            content: editor::wrap_enml("<b>body</b>"),
+            attributes: NoteAttributes {
+                source_url: Some("https://source.example/article".to_string()),
+                ..NoteAttributes::default()
+            },
+            ..Note::default()
+        };
+        for terminal_styles in [false, true] {
+            let options = ShowOptions {
+                terminal_styles,
+                ..ShowOptions::default()
+            };
+            let without_urls = show_note_with_options(&note, 111, "s1", &config, options);
+            assert!(!without_urls.contains("NoteLink:"));
+            assert!(!without_urls.contains("WebClientURL:"));
+            assert!(without_urls.contains("sourceURL: https://source.example/article\n"));
+            let with_urls = show_note_with_options(
+                &note,
+                111,
+                "s1",
+                &config,
+                ShowOptions {
+                    show_url: true,
+                    ..options
+                },
+            );
+            assert_eq!(
+                with_urls,
+                format!(
+                    "{}NoteLink: https://notes.example/shard/s1/nl/111/note-guid\nWebClientURL: https://notes.example/note/note-guid\n{without_urls}",
+                    separator('#', "URL"),
+                )
+            );
+        }
     }
 
     #[test]
