@@ -1,0 +1,6 @@
+status: 0
+--- stdout ---
+Options for: download
+Available arguments:
+--note : [default] Note name, GUID, or previous search ID.
+--- stderr ---

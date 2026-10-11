@@ -67,6 +67,7 @@ fn run(args: Vec<String>) -> Result<()> {
         Some("user") => handle_user(&mut storage, &config, values),
         Some("find") => handle_find(&mut storage, &config, values),
         Some("show") => handle_show(&mut storage, &config, values),
+        Some("download") => handle_download(&mut storage, &config, values),
         Some("create") => handle_create(&mut storage, &config, values),
         Some("create-linked") => handle_create_linked(&mut storage, &config, values),
         Some("edit") => handle_edit(&mut storage, &config, values),
@@ -356,6 +357,35 @@ fn handle_show(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Re
         if terminal_styles && io::stdin().is_terminal() {
             offer_audio_playback(&mut client, &note)?;
         }
+    }
+    Ok(())
+}
+
+/// Download a selected note's attachments to the working directory, without playback.
+fn handle_download(storage: &mut Storage, config: &Config, values: ParsedArgs) -> Result<()> {
+    let note_ref = required_string(&values, "note")?;
+    let mut client = make_client(storage, config)?;
+    let note = resolve_note(storage, &mut client, config, &note_ref)?;
+    let count = reeknote::attachments::download_attachments(
+        &note,
+        Path::new("."),
+        |resource| {
+            if !resource.guid.is_empty() {
+                return client.get_resource_data(&resource.guid);
+            }
+            let hash = decode_hex_hash(&resource.data.body_hash)
+                .filter(|hash| hash.len() == 16)
+                .ok_or_else(|| {
+                    ReeknoteError::External(
+                        "resource has no GUID or valid content hash".to_string(),
+                    )
+                })?;
+            Ok(client.get_resource_by_hash(&note.guid, &hash)?.data.body)
+        },
+        io::stdout().lock(),
+    )?;
+    if count == 0 {
+        println!("This note has no attachments.");
     }
     Ok(())
 }

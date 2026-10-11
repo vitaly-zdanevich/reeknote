@@ -610,6 +610,16 @@ pub fn default_commands() -> Vec<CommandSpec> {
             )
             .flag(OptionSpec::flag("--raw", "Show raw note body.").alt("-w"))
             .flag(OptionSpec::flag("--with-url", "Show note links and web URLs.").alt("-wu")),
+        CommandSpec::new(
+            "download",
+            "Download all note attachments to the current directory.",
+        )
+        .first_arg("--note")
+        .argument(
+            OptionSpec::argument("--note", "Note name, GUID, or previous search ID.")
+                .alt("-n")
+                .required(),
+        ),
         CommandSpec::new("remove", "Remove note from Evernote.")
             .first_arg("--note")
             .argument(
@@ -794,6 +804,31 @@ mod tests {
             panic!("expected parsed values");
         };
         assert_eq!(values.get("content"), Some(&ArgValue::Bool(true)));
+    }
+
+    /// Download uses the same positional, explicit, and short note selector as show.
+    #[test]
+    fn parses_download_note() {
+        for args in [
+            vec!["download", "My note"],
+            vec!["download", "--note", "My note"],
+            vec!["download", "-n", "My note"],
+        ] {
+            let ParseOutcome::Parsed(values) = ArgParser::default().parse(args).unwrap() else {
+                panic!("expected parsed values");
+            };
+            assert_eq!(
+                values.get("note"),
+                Some(&ArgValue::String("My note".to_string()))
+            );
+        }
+    }
+
+    /// Missing note arguments must fail before authentication or filesystem writes.
+    #[test]
+    fn download_requires_note() {
+        let error = ArgParser::default().parse(["download"]).unwrap_err();
+        assert!(error.message.contains("--note"));
     }
 
     /// URL output is opt-in, accepts the existing short alias, and keeps raw mode.

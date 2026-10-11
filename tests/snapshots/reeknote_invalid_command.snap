@@ -6,6 +6,7 @@ Available commands:
          create : Create note in Evernote.
   create-linked : Create linked note in Evernote.
           dedup : Preview duplicate notes without removing them.
+       download : Download all note attachments to the current directory.
            edit : Edit note in Evernote.
     edit-linked : Edit linked note.
            find : Search notes in Evernote.

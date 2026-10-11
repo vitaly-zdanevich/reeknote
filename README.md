@@ -14,6 +14,7 @@ It allows you to:
 * show notes in the terminal;
 * edit notes using any editor, such as nano, vim, emacs, or mcedit;
 * download notes to local files with `rnsync`;
+* download a note's attachments to the current folder with `reeknote download`;
 * use Evernote from cron jobs and scripts.
 
 This document shows how to work with Evernote notes, notebooks, tags, and
@@ -367,7 +368,7 @@ for the application name, use `reeknote`.
 $ reeknote settings
 Reeknote
 ******************************
-Version: 0.10.0
+Version: 0.11.0
 App dir: /home/username/.reeknote
 Error log: /home/username/.reeknote/error.log
 Editor: nano
@@ -667,6 +668,29 @@ Raw ENML output:
 ```sh
 reeknote show 2 --raw
 ```
+
+### Notes: Downloading Attachments
+
+Download all attachments from a single note into the current directory:
+
+```sh
+reeknote download 'My note'
+reeknote download --note 'NOTE-GUID'
+reeknote download 2
+```
+
+Like `show`, `download` accepts a title, GUID, or previous search result ID.
+When multiple notes match, Reeknote asks you to choose. This downloads all
+attachment types, including images, audio, PDFs, and other files, without
+exporting the note text or starting playback. Each saved path is printed;
+notes without attachments produce a message instead.
+
+Original filenames are preserved where safe. Directory components are removed
+and control characters are replaced. Unnamed files use `attachment-1.png` or
+another extension based on their MIME type, falling back to `.bin`. Existing
+files are never overwritten: duplicate names become `report-1.pdf`,
+`report-2.pdf`, and so on. Completed downloads remain saved if a later one
+fails; incomplete files are not left behind.
 
 ### Notes: Removing Notes
 

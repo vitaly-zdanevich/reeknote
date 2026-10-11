@@ -46,6 +46,17 @@ fn reeknote_settings_snapshot() {
     let _ = fs::remove_dir_all(app_dir);
 }
 
+/// Keep the single-note attachment download discoverable without logging in.
+#[test]
+fn reeknote_download_help_snapshot() {
+    assert_cli_snapshot(
+        "reeknote_download_help",
+        reeknote_bin(),
+        &["download", "--help"],
+        None,
+    );
+}
+
 #[test]
 fn reeknote_invalid_command_snapshot() {
     assert_cli_snapshot("reeknote_invalid_command", reeknote_bin(), &["nope"], None);

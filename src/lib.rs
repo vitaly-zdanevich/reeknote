@@ -1,4 +1,5 @@
 pub mod argparser;
+pub mod attachments;
 pub mod config;
 pub mod edam_client;
 pub mod editor;
