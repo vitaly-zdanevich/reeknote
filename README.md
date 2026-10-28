@@ -305,8 +305,8 @@ reeknote login
 ```
 
 This starts the authorization process. Reeknote asks for a developer token or
-uses OAuth, then stores the token in the local database. Re-authorization is not
-required unless you log out or change users.
+uses OAuth, then stores the token in the local database. Re-authorization is
+required if you log out, change users, or your token expires or is revoked.
 
 By default, OAuth uses Reeknote's built-in Evernote app credentials. To test a
 different legacy Evernote OAuth application without changing the source code,
@@ -362,13 +362,21 @@ EVERNOTE_DEV_TOKEN=... reeknote login
 You can request Evernote API access from Evernote Developer Support. When asked
 for the application name, use `reeknote`.
 
+If a request fails with `AUTH_EXPIRED`, your token has expired or been revoked.
+Obtain a new token from the [Evernote developer token page](https://www.evernote.com/api/DeveloperToken.action)
+and run `reeknote login` again. If you use `EVERNOTE_DEV_TOKEN`, update or unset it
+first: it overrides the saved token. For OAuth, unset `EVERNOTE_DEV_TOKEN`, run
+`reeknote login`, and leave the developer token prompt empty.
+See Evernote's [authentication error reference](https://dev.evernote.com/doc/reference/UserStore.html)
+for details about `AUTH_EXPIRED` and other authentication errors.
+
 ### Examining Your Settings
 
 ```sh
 $ reeknote settings
 Reeknote
 ******************************
-Version: 0.11.0
+Version: 0.11.1
 App dir: /home/username/.reeknote
 Error log: /home/username/.reeknote/error.log
 Editor: nano

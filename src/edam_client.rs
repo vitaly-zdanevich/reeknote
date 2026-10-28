@@ -6,6 +6,7 @@ use crate::models::{
     SearchResult, Tag, UserInfo,
 };
 use crate::reeknote::{EvernoteClient, ParsedNoteInput, ReminderValue};
+use evernote::errors::{EDAMErrorCode, EDAMUserException};
 use evernote::note_store::{
     NoteFilter, NoteStoreSyncClient, NotesMetadataResultSpec, TNoteStoreSyncClient,
 };
@@ -676,8 +677,81 @@ impl Write for HttpWriteHalf {
     }
 }
 
+/// Preserves EDAM user error details hidden by the generated exception's Display.
 fn map_thrift_error(error: thrift::Error) -> ReeknoteError {
+    if let thrift::Error::User(exception) = &error {
+        if let Some(exception) = exception.downcast_ref::<EDAMUserException>() {
+            return ReeknoteError::External(edam_user_error_message(exception));
+        }
+    }
     ReeknoteError::External(format!("Evernote API error: {error}"))
+}
+
+/// Formats the server's code and parameter name, with guidance for reauthorization.
+///
+/// Only server-provided details are formatted; the client's token is never added.
+/// Debug formatting escapes control characters in the parameter for terminal output.
+fn edam_user_error_message(exception: &EDAMUserException) -> String {
+    let mut message = format!(
+        "Evernote API error: {} ({})",
+        edam_error_code_name(exception.error_code),
+        exception.error_code.0
+    );
+    if let Some(parameter) = exception
+        .parameter
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        message.push_str(&format!(" (parameter: {parameter:?})"));
+    }
+
+    let explanation = match exception.error_code {
+        EDAMErrorCode::AUTH_EXPIRED => "authentication token has expired or been revoked",
+        EDAMErrorCode::INVALID_AUTH => "authentication failed; the credentials were rejected",
+        _ => return message,
+    };
+    message.push_str(&format!(
+        ": {explanation}.\nRun `reeknote login` to authorize again. \
+         For developer tokens, obtain a new token first:\n\
+         https://www.evernote.com/api/DeveloperToken.action\n\
+         If EVERNOTE_DEV_TOKEN is set, update or unset it; it overrides the saved token."
+    ));
+    message
+}
+
+/// Names codes from the SDK; the caller also prints the number for unknown codes.
+fn edam_error_code_name(code: EDAMErrorCode) -> &'static str {
+    match code {
+        EDAMErrorCode::UNKNOWN => "UNKNOWN",
+        EDAMErrorCode::BAD_DATA_FORMAT => "BAD_DATA_FORMAT",
+        EDAMErrorCode::PERMISSION_DENIED => "PERMISSION_DENIED",
+        EDAMErrorCode::INTERNAL_ERROR => "INTERNAL_ERROR",
+        EDAMErrorCode::DATA_REQUIRED => "DATA_REQUIRED",
+        EDAMErrorCode::LIMIT_REACHED => "LIMIT_REACHED",
+        EDAMErrorCode::QUOTA_REACHED => "QUOTA_REACHED",
+        EDAMErrorCode::INVALID_AUTH => "INVALID_AUTH",
+        EDAMErrorCode::AUTH_EXPIRED => "AUTH_EXPIRED",
+        EDAMErrorCode::DATA_CONFLICT => "DATA_CONFLICT",
+        EDAMErrorCode::ENML_VALIDATION => "ENML_VALIDATION",
+        EDAMErrorCode::SHARD_UNAVAILABLE => "SHARD_UNAVAILABLE",
+        EDAMErrorCode::LEN_TOO_SHORT => "LEN_TOO_SHORT",
+        EDAMErrorCode::LEN_TOO_LONG => "LEN_TOO_LONG",
+        EDAMErrorCode::TOO_FEW => "TOO_FEW",
+        EDAMErrorCode::TOO_MANY => "TOO_MANY",
+        EDAMErrorCode::UNSUPPORTED_OPERATION => "UNSUPPORTED_OPERATION",
+        EDAMErrorCode::TAKEN_DOWN => "TAKEN_DOWN",
+        EDAMErrorCode::RATE_LIMIT_REACHED => "RATE_LIMIT_REACHED",
+        EDAMErrorCode::BUSINESS_SECURITY_LOGIN_REQUIRED => "BUSINESS_SECURITY_LOGIN_REQUIRED",
+        EDAMErrorCode::DEVICE_LIMIT_REACHED => "DEVICE_LIMIT_REACHED",
+        EDAMErrorCode::OPENID_ALREADY_TAKEN => "OPENID_ALREADY_TAKEN",
+        EDAMErrorCode::INVALID_OPENID_TOKEN => "INVALID_OPENID_TOKEN",
+        EDAMErrorCode::USER_NOT_ASSOCIATED => "USER_NOT_ASSOCIATED",
+        EDAMErrorCode::USER_NOT_REGISTERED => "USER_NOT_REGISTERED",
+        EDAMErrorCode::USER_ALREADY_ASSOCIATED => "USER_ALREADY_ASSOCIATED",
+        EDAMErrorCode::ACCOUNT_CLEAR => "ACCOUNT_CLEAR",
+        EDAMErrorCode::SSO_AUTHENTICATION_REQUIRED => "SSO_AUTHENTICATION_REQUIRED",
+        _ => "UNRECOGNIZED_ERROR",
+    }
 }
 
 fn metadata_result_spec() -> NotesMetadataResultSpec {
@@ -974,6 +1048,9 @@ fn now_millis() -> i64 {
         .map(|duration| duration.as_millis() as i64)
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod error_tests;
 
 #[cfg(test)]
 mod tests {
