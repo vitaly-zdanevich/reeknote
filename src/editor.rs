@@ -686,17 +686,43 @@ fn replace_paragraphs(content: &str) -> String {
     })
 }
 
+/// Render adjacent Evernote divs as lines, preserving explicit empty blocks.
+///
+/// Whitespace between adjacent div tags belongs to the serialized markup. Keep
+/// the existing padding around other block types and at the end of a line run.
 fn replace_divs(content: &str) -> String {
-    replace_simple_tag(content, "div", |inner| {
+    let mut output = String::new();
+    let mut rest = content;
+
+    while let Some((open_start, open_end, _)) = find_open_tag(rest, "div") {
+        output.push_str(&rest[..open_start]);
+        let Some((body_end, close_end)) = find_matching_close_tag(rest, "div", open_end) else {
+            output.push_str(&rest[open_start..]);
+            return output;
+        };
+        let inner = &rest[open_end..body_end];
+        // Preserve padding from block renderers before adding div line endings.
+        let preserve_block_spacing = inner.ends_with("\n\n");
+        let inner = replace_divs(inner);
         let text = inner.trim();
+        let tail = &rest[close_end..];
+        let next = tail.trim_start();
+        let adjacent_div = find_open_tag(next, "div").is_some_and(|(start, _, _)| start == 0);
+
         if matches!(text, "<br/>" | "<br />" | "<br>") {
-            format!("\n{EXPLICIT_BLANK_LINE}\n")
-        } else if is_compact_div_text(text) {
-            format!("{text}\n")
+            output.push_str(&format!("\n{EXPLICIT_BLANK_LINE}\n"));
+        } else if preserve_block_spacing {
+            output.push_str(&format!("{text}\n\n"));
+        } else if adjacent_div || is_compact_div_text(text) {
+            output.push_str(&format!("{text}\n"));
         } else {
-            format!("{text}\n\n")
+            output.push_str(&format!("{text}\n\n"));
         }
-    })
+        rest = if adjacent_div { next } else { tail };
+    }
+
+    output.push_str(rest);
+    output
 }
 
 fn is_compact_div_text(text: &str) -> bool {

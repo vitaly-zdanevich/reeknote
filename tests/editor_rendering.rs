@@ -158,13 +158,85 @@ fn converts_task_lists() {
     );
 }
 
+/// Adjacent Evernote divs are consecutive lines, not separate paragraphs.
 #[test]
-fn converts_div_blocks_to_paragraphs() {
-    let html = "<div>First paragraph</div><div>Second paragraph</div>";
+fn converts_div_blocks_to_lines() {
+    let html = "<div>First line</div><div>Second line</div>";
     assert_eq!(
         enml_to_text(&wrap_enml(html)),
-        "First paragraph\n\nSecond paragraph\n\n"
+        "First line\nSecond line\n\n"
     );
+}
+
+/// Reproduce the spacing in the user's read-only "My note formatting test" note.
+#[test]
+fn preserves_consecutive_lines_and_the_explicit_gap_in_the_reported_note() {
+    let note = concat!(
+        "<!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\">",
+        "<en-note><div>This is my first line</div><div>This is my second line</div>",
+        "<div><br/></div>",
+        "<div>This is my third line - after the empty line delimeter.</div></en-note>",
+    );
+    let expected = concat!(
+        "This is my first line\nThis is my second line\n\n",
+        "This is my third line - after the empty line delimeter.\n\n",
+    );
+    for output in [
+        enml_to_text(note),
+        enml_to_terminal_text(note),
+        enml_to_text_with_options(note, TextFormat::Plain, &ImageOptions::default()),
+    ] {
+        assert_eq!(output, expected);
+    }
+}
+
+/// Node attributes and container divs must not change line spacing.
+#[test]
+fn preserves_consecutive_lines_in_attributed_and_nested_divs() {
+    for attributes in ["", " style=\"--en-nodeId:test;\""] {
+        let lines = format!(
+            "<div{attributes}>First</div>\n<div{attributes}>Second</div>\n\
+             <div{attributes}><br/></div>\n<div{attributes}>Third</div>",
+        );
+        for body in [lines.clone(), format!("<div{attributes}>{lines}</div>")] {
+            let note = wrap_enml(&body);
+            assert_eq!(enml_to_text(&note), "First\nSecond\n\nThird\n\n");
+            assert_eq!(enml_to_terminal_text(&note), "First\nSecond\n\nThird\n\n");
+        }
+    }
+}
+
+/// Compact line runs must retain spacing around actual paragraphs and code blocks.
+#[test]
+fn keeps_paragraph_and_code_spacing_after_consecutive_lines() {
+    let note = wrap_enml(concat!(
+        "<div>First</div><div>Second</div><p>A paragraph</p>",
+        "<pre>let value = 1;</pre><div>Last</div>",
+    ));
+    assert_eq!(
+        enml_to_text(&note),
+        "First\nSecond\n\nA paragraph\n\n```\nlet value = 1;\n```\n\nLast\n\n",
+    );
+}
+
+/// Line compaction must retain the padding added by image, code, and quote renderers.
+#[test]
+fn keeps_rendered_blocks_separate_from_following_div_lines() {
+    for block in [
+        "<en-media type=\"image/png\" hash=\"abc\"/>",
+        "<pre>let value = 1;</pre>",
+        "<blockquote>A quote</blockquote>",
+    ] {
+        let note = wrap_enml(&format!(
+            "<div>{block}</div><div>After</div><div>Then</div>",
+        ));
+        for output in [enml_to_text(&note), enml_to_terminal_text(&note)] {
+            assert!(
+                output.ends_with("\n\nAfter\nThen\n\n"),
+                "Output: {output:?}"
+            );
+        }
+    }
 }
 
 /// Reproduce issue #5 with the ENML fetched from the reported test note.
@@ -203,7 +275,7 @@ fn preserves_evernote_blank_lines_in_text_output() {
 fn preserves_evernote_blank_lines_without_adding_paragraph_spacing() {
     for line_break in ["<br/>", "<br />", "<br>"] {
         for separator in ["", "\n", "\r\n"] {
-            for blank_lines in 1..=3 {
+            for blank_lines in 0..=3 {
                 let gap = format!("<div>{line_break}</div>{separator}").repeat(blank_lines);
                 let note = wrap_enml(&format!(
                     "<div>Before</div>{separator}{gap}<div>After</div>",

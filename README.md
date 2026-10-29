@@ -376,7 +376,7 @@ for details about `AUTH_EXPIRED` and other authentication errors.
 $ reeknote settings
 Reeknote
 ******************************
-Version: 0.11.1
+Version: 0.11.2
 App dir: /home/username/.reeknote
 Error log: /home/username/.reeknote/error.log
 Editor: nano
